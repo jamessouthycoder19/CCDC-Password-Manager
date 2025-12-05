@@ -24,13 +24,13 @@ app.config.update(
 
 # ============= Setup SQLite Database ========================
 
+SERVER_PRIVATE_KEY = ""
+SERVER_PUBLIC_KEY = ""
+ENCRYPTION_KEY = ""
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
-SERVER_PRIVATE_KEY = None
-SERVER_PUBLIC_KEY = None
-ENCRYPTION_KEY = ""
 
 def get_encryption_key():
     global ENCRYPTION_KEY
@@ -80,6 +80,7 @@ def init_db():
     db.commit()
 
 def init_server_pub_priv_keys():
+    global SERVER_PRIVATE_KEY, SERVER_PUBLIC_KEY
     # Check if keys already exist
     if os.path.exists("server_private_key.pem") and os.path.exists("server_public_key.pem"):
         # Load existing keys
@@ -93,7 +94,6 @@ def init_server_pub_priv_keys():
                 f.read()
             )
         
-        global SERVER_PRIVATE_KEY, SERVER_PUBLIC_KEY
         SERVER_PRIVATE_KEY = private_key
         SERVER_PUBLIC_KEY = public_key
         return
@@ -121,7 +121,6 @@ def init_server_pub_priv_keys():
             )
         )
     
-    global SERVER_PRIVATE_KEY, SERVER_PUBLIC_KEY
     SERVER_PRIVATE_KEY = private_key
     SERVER_PUBLIC_KEY = public_key
 
@@ -147,22 +146,6 @@ def decrypt_message_pub_key(public_key, ciphertext: bytes) -> str:
     try:
         # Note: Public keys cannot decrypt; this is just for demonstration
         plaintext = public_key.decrypt(
-            ciphertext,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return plaintext.decode('utf-8')
-    except Exception as e:
-        raise RuntimeError(f"Decryption failed: {e}")
-
-def encrypt_message_privaet_key(private_key, ciphertext: bytes) -> str:
-    if not isinstance(ciphertext, bytes):
-        raise TypeError("Ciphertext must be bytes.")
-    try:
-        plaintext = private_key.decrypt(
             ciphertext,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -298,6 +281,16 @@ def logout():
 def page_dashboard():
     return render_template("dashboard.html")
 
+@app.route("/update_local_users", methods=["POST"])
+def update_local_users():
+    ip_address = request.form.get("ip_address")
+    local_users = request.form.get("local_users")
+    if not ip_address or not local_users:
+        return "Missing ip_address or local_users", 400
+    db = get_db()
+    print(f"Received local users from {ip_address}: {local_users}")
+    return "Local users updated", 200
+
 @app.route("/register_client", methods=["POST"])
 def register_client():
     # Client will send its IP and public key in POST data
@@ -312,8 +305,15 @@ def register_client():
     )
     db.commit()
 
+    # Return server's public key
+    pem = SERVER_PUBLIC_KEY.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return pem, 200, {'Content-Type': 'application/octet-stream'}
+
 if __name__ == '__main__':
-    init_server_pub_priv_keys()
-    app.run(host="127.0.0.1", port=6767, debug=True)
     with app.app_context():
         init_db()
+    init_server_pub_priv_keys()
+    app.run(host="127.0.0.1", port=6767, debug=True)
