@@ -431,4 +431,4 @@ if __name__ == '__main__':
     with app.app_context():
         clear_db()
         init_db()
-    app.run(host="127.0.0.1", port=6767, debug=True)
+    app.run(host="0.0.0.0", port=443, debug=True, ssl_context='adhoc')

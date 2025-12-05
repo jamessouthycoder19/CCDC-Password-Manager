@@ -55,7 +55,7 @@ if __name__ == '__main__':
     data = {
         'ip_address': local_ip_address,
     }
-    output = requests.post('http://localhost:6767/register_client', data=data)
+    output = requests.post('https://129.21.108.33:443/register_client', data=data)
     token = output.text
 
     # get all local users on the system
@@ -67,6 +67,6 @@ if __name__ == '__main__':
         'ip_address': local_ip_address,
         'authoriztion_token': output.text
     }
-    requests.post('http://localhost:6767/update_local_users', data=data)
+    requests.post('https://129.21.108.33:443/update_local_users', data=data)
 
     sleep(5)
