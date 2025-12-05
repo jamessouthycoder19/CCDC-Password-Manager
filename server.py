@@ -3,12 +3,12 @@ from flask import Flask, request, render_template, redirect, url_for, flash, ses
 from datetime import timedelta
 import os
 from urllib.parse import urlparse, unquote_plus
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
 import sqlite3
 from argon2 import PasswordHasher
 import hashlib
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
 
 
 # ============= Set Flask Config ========================
@@ -22,15 +22,38 @@ app.config.update(
     SESSION_REFRESH_EACH_REQUEST=True # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
 )
 
-# ============= Setup SQLite Database ========================
+######################### Setup important local Variables #########################
 
-SERVER_PRIVATE_KEY = ""
-SERVER_PUBLIC_KEY = ""
 ENCRYPTION_KEY = ""
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+
+password_hasher = PasswordHasher()
+
+####################### Helper functions #########################
+
+def encrypt_data(plaintext):
+    global ENCRYPTION_KEY
+    key = ENCRYPTION_KEY.encode('utf-8')[:32]
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    padder = padding.PKCS7(256).padder()
+    padded_data = padder.update(plaintext.encode('utf-8')) + padder.finalize()
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+    return ciphertext
+
+def decrypt_data(ciphertext):
+    global ENCRYPTION_KEY
+    key = ENCRYPTION_KEY.encode('utf-8')[:32]
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+    unpadder = padding.PKCS7(256).unpadder()
+    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+    return plaintext.decode('utf-8')
 
 def get_encryption_key():
     global ENCRYPTION_KEY
@@ -68,97 +91,23 @@ def init_db():
     CREATE TABLE IF NOT EXISTS passwords (
         ip_address TEXT NOT NULL,
         username   TEXT NOT NULL,
-        password   TEXT NOT NULL,
+        password   TEXT,
         PRIMARY KEY (ip_address, username)
     );
                      
-    CREATE TABLE IF NOT EXISTS client_pub_keys (
+    CREATE TABLE IF NOT EXISTS client_tokens (
         ip_address TEXT PRIMARY KEY,
-        pub_key    TEXT NOT NULL
+        token      TEXT
     );
     """)
     db.commit()
 
-def init_server_pub_priv_keys():
-    global SERVER_PRIVATE_KEY, SERVER_PUBLIC_KEY
-    # Check if keys already exist
-    if os.path.exists("server_private_key.pem") and os.path.exists("server_public_key.pem"):
-        # Load existing keys
-        with open("server_private_key.pem", "rb") as f:
-            private_key = serialization.load_pem_private_key(
-                f.read(),
-                password=None
-            )
-        with open("server_public_key.pem", "rb") as f:
-            public_key = serialization.load_pem_public_key(
-                f.read()
-            )
-        
-        SERVER_PRIVATE_KEY = private_key
-        SERVER_PUBLIC_KEY = public_key
-        return
-    # Generate new RSA key pair
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048
-    )
-    public_key = private_key.public_key()
-    # Save private key
-    with open("server_private_key.pem", "wb") as f:
-        f.write(
-            private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-        )
-    # Save public key
-    with open("server_public_key.pem", "wb") as f:
-        f.write(
-            public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )
-        )
-    
-    SERVER_PRIVATE_KEY = private_key
-    SERVER_PUBLIC_KEY = public_key
-
-def encrypt_message_pub_key(public_key, message: str) -> bytes:
-    if not isinstance(message, str):
-        raise TypeError("Message must be a string.")
-    try:
-        ciphertext = public_key.encrypt(
-            message.encode('utf-8'),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return ciphertext
-    except Exception as e:
-        raise RuntimeError(f"Encryption failed: {e}")
-
-def decrypt_message_pub_key(public_key, ciphertext: bytes) -> str:
-    if not isinstance(ciphertext, bytes):
-        raise TypeError("Ciphertext must be bytes.")
-    try:
-        # Note: Public keys cannot decrypt; this is just for demonstration
-        plaintext = public_key.decrypt(
-            ciphertext,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return plaintext.decode('utf-8')
-    except Exception as e:
-        raise RuntimeError(f"Decryption failed: {e}")
-
-# ============= Setup Password Hasher ========================
-password_hasher = PasswordHasher()
+def clear_db():
+    db = get_db()
+    db.execute("DROP TABLE IF EXISTS app_credentials")
+    db.execute("DROP TABLE IF EXISTS passwords")
+    db.execute("DROP TABLE IF EXISTS client_tokens")
+    db.commit()
 
 def get_sha256_hash(data):
     sha256 = hashlib.sha256()
@@ -210,6 +159,8 @@ class User(UserMixin):
     def __init__(self, id, role):
         self.id = id
         self.role = role
+
+###################### UI Login Handlers #########################
 
 @login_manager.user_loader
 def load_user(id):
@@ -275,45 +226,209 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+
+####################### UI Static Pages #########################
+
 @app.route("/")
 @app.route("/dashboard")
 @login_required
 def page_dashboard():
     return render_template("dashboard.html")
 
+@login_required
+@app.route('/agent')
+def agent_page():
+    return render_template('agent.html')
+
+####################### UI APIs #########################
+
+@login_required
+@app.route("/add_client", methods=["POST"])
+def add_client():
+    ip_address = request.form.get("ip_address")
+    if not ip_address:
+        return "Missing ip_address", 400
+    db = get_db()
+    row = db.execute(
+        "SELECT ip_address FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if row:
+        return "Client already exists", 400
+    db.execute(
+        "INSERT OR REPLACE INTO client_tokens (ip_address, token) VALUES (?, ?)",
+        (ip_address, None)
+    )
+    db.commit()
+
+    return "OK", 200
+
+@login_required
+@app.route("/get_clients", methods=["GET"])
+def get_clients():
+    db = get_db()
+    rows = db.execute("SELECT ip_address, token FROM client_tokens").fetchall()
+    clients = []
+    for row in rows:
+        status = "Connected" if row['token'] else "Unregistered"
+        users = db.execute(
+            "SELECT COUNT(*) as user_count FROM passwords WHERE ip_address = ?",
+            (row['ip_address'],)
+        ).fetchone()
+        users_with_passwords = db.execute(
+            "SELECT COUNT(*) as user_count FROM passwords WHERE ip_address = ? AND password IS NOT NULL",
+            (row['ip_address'],)
+        ).fetchone()
+        clients.append({
+            'ip_address': row['ip_address'],
+            'status': status,
+            'total_users': users['user_count'],
+            'users_with_passwords': users_with_passwords['user_count'],
+        })
+    return {'clients': clients}, 200
+
+@login_required
+@app.route("/reset_client_token", methods=["POST"])
+def reset_client_token():
+    ip_address = request.form.get("ip_address")
+    if not ip_address:
+        return "Missing ip_address", 400
+    db = get_db()
+    db.execute(
+        "UPDATE client_tokens SET token = ? WHERE ip_address = ?",
+        (None, ip_address)
+    )
+    db.commit()
+
+    return "OK", 200
+
+@login_required
+@app.route("/remove_client", methods=["POST"])
+def remove_client():
+    ip_address = request.form.get("ip_address")
+    if not ip_address:
+        return "Missing ip_address", 400
+    db = get_db()
+    db.execute(
+        "DELETE FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    )
+    db.commit()
+
+    return "OK", 200
+
+@login_required
+@app.route("/get_users", methods=["GET"])
+def get_users():
+    ip_address = request.args.get("ip_address")
+    if not ip_address:
+        return "Missing ip_address", 400
+    db = get_db()
+    rows = db.execute(
+        "SELECT username, password FROM passwords WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchall()
+    users = []
+    for row in rows:
+        users.append({
+            'username': row['username'],
+            'password_exists': row['password'] is not None,
+        })
+    return {'users': users}, 200
+
+@login_required
+@app.route("/set_user_password", methods=["POST"])
+def set_user_password():
+    ip_address = request.form.get("ip_address")
+    username = request.form.get("username")
+    password_value = request.form.get("password_value")
+    if not ip_address or not username or not password_value:
+        return "Missing ip_address, username, or password_value", 400
+    encrypted_password = encrypt_data(password_value)
+    add_stored_password(ip_address, username, encrypted_password)
+    return "OK", 200\
+    
+@login_required
+@app.route("/get_user_password", methods=["GET"])
+def get_user_password():
+    ip_address = request.args.get("ip_address")
+    username = request.args.get("username")
+    if not ip_address or not username:
+        return "Missing ip_address or username", 400
+    db = get_db()
+    row = db.execute(
+        "SELECT password FROM passwords WHERE ip_address = ? AND username = ?",
+        (ip_address, username)
+    ).fetchone()
+    if row and row['password']:
+        decrypted_password = decrypt_data(row['password'])
+        return {'password': decrypted_password}, 200
+    return "Password not set", 404
+
+##################### Client APIs #########################
+
 @app.route("/update_local_users", methods=["POST"])
 def update_local_users():
     ip_address = request.form.get("ip_address")
-    local_users = request.form.get("local_users")
+    local_users = request.form.getlist("local_users")
+    token = request.form.get("authoriztion_token")
+    # Check auth
+    if not token:
+        return "Missing authorization token", 400
+    db = get_db()
+    row = db.execute(
+        "SELECT token FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if not row or row['token'] != token:
+        return "Unauthorized", 401
     if not ip_address or not local_users:
         return "Missing ip_address or local_users", 400
-    db = get_db()
-    print(f"Received local users from {ip_address}: {local_users}")
+    local_users = local_users[0].split(',')
+    # Update local users
+    existing_users = db.execute(
+        "SELECT username FROM passwords WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchall()
+    existing_usernames = {row['username'] for row in existing_users}
+    for user in local_users:
+        if user not in existing_usernames:
+            db.execute(
+                "INSERT INTO passwords (ip_address, username, password) VALUES (?, ?, ?)",
+                (ip_address, user, None)
+            )
+    db.commit()
     return "Local users updated", 200
 
 @app.route("/register_client", methods=["POST"])
 def register_client():
-    # Client will send its IP and public key in POST data
+    # Client will send its IP
     ip_address = request.form.get("ip_address")
-    pub_key = request.form.get("pub_key")
-    if not ip_address or not pub_key:
-        return "Missing ip_address or pub_key", 400
+    if not ip_address:
+        return "Missing IP Address", 400
     db = get_db()
-    db.execute(
-        "INSERT OR REPLACE INTO client_pub_keys (ip_address, pub_key) VALUES (?, ?)",
-        (ip_address, pub_key)
-    )
+    row = db.execute(
+        "SELECT ip_address, token FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if row:
+        if row['token']:
+            return "Client already registered", 400
+        else:
+            # Generate token
+            token = os.urandom(16).hex()
+            db.execute(
+                "UPDATE client_tokens SET token = ? WHERE ip_address = ?",
+                (token, ip_address)
+            )
+            db.commit()
+            return token, 200
     db.commit()
 
-    # Return server's public key
-    pem = SERVER_PUBLIC_KEY.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-    return pem, 200, {'Content-Type': 'application/octet-stream'}
+    return "OK", 200
 
 if __name__ == '__main__':
     with app.app_context():
+        clear_db()
         init_db()
-    init_server_pub_priv_keys()
     app.run(host="127.0.0.1", port=6767, debug=True)

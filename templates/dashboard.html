@@ -1,189 +1,723 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stabvest Homepage</title>
-<style>
-:root{
-  --bg:#0b1220;
-  --card:#0f1a2b;
-  --muted:#a0b0c0;
-  --text:#ffffff;
-  --accent:#4aa3ff;
-  --accent-2:#2e6fb6;
-  --row-hover:#0e2a45;
-  --border: rgba(255,255,255,0.04);
-  --bool-dark:#888888;
-  --danger:#ff6b6b;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <title>Password Manager - Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg), #071020);color:var(--text);}
-.container{max-width:1200px;margin:28px auto;padding:20px;}
+    body {
+      background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #000000 100%);
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+      padding: clamp(20px, 5vw, 40px);
+    }
 
-header{display:flex;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
-header h1{margin:0;font-size:28px;}
-header p.lead{margin:0;color:var(--muted);font-size:14px;}
+    .dashboard-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
 
-.dashboard-links{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:32px;}
-.dashboard-links a{
-  flex:1 1 180px;
-  text-align:center;
-  padding:14px 18px;
-  border-radius:10px;
-  text-decoration:none;
-  background:linear-gradient(180deg,var(--accent),var(--accent-2));
-  color:#042033;
-  font-weight:600;
-  transition:transform 0.2s;
-}
-.dashboard-links a:hover{transform:scale(1.05);}
+    .dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
 
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;}
-.stat-card{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);box-shadow:0 6px 20px rgba(10,15,25,0.6);}
-.stat-card h3{margin-top:0;margin-bottom:8px;font-size:20px;color:var(--accent);}
-.stat-card p.desc{margin:0 0 12px 0;color:var(--muted);font-size:13px;}
-.stat-card p.value{margin:0;font-size:24px;font-weight:600;}
+    .header-content {
+      display: flex;
+      align-items: center;
+      gap: clamp(20px, 5vw, 40px);
+    }
 
-.bool-dark{color:var(--bool-dark);}
-.false-red{color:var(--danger);font-weight:bold;}
+    .logo-img {
+      width: clamp(80px, 10vw, 150px);
+      height: auto;
+      filter: drop-shadow(0 4px 8px rgba(255, 102, 0, 0.3));
+    }
 
-.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#042033;padding:12px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;z-index:100}
-.toast.show{opacity:1;}
-</style>
+    .header-text h1 {
+      color: #ff6600;
+      font-size: clamp(24px, 5vw, 36px);
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: 0.5px;
+    }
+
+    .header-text p {
+      color: #ccc;
+      font-size: 14px;
+      margin: 5px 0 0 0;
+    }
+
+    .add-agent-btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+
+    .add-agent-btn:hover {
+      background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+      color: white;
+    }
+
+    .add-agent-btn:active {
+      transform: translateY(0);
+    }
+
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+      margin-top: 30px;
+    }
+
+    .agent-card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 24px;
+      border: 2px solid rgba(255, 102, 0, 0.2);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .agent-card:hover {
+      border-color: rgba(255, 102, 0, 0.5);
+      box-shadow: 0 12px 40px rgba(255, 102, 0, 0.2);
+      transform: translateY(-4px);
+    }
+
+    .card-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .card-title {
+      color: #ff6600;
+      font-size: 18px;
+      font-weight: 700;
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .card-menu {
+      position: relative;
+    }
+
+    .menu-btn {
+      background: transparent;
+      border: none;
+      color: #ccc;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .menu-btn:hover {
+      background: rgba(255, 102, 0, 0.2);
+      color: #ff6600;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: rgba(30, 30, 30, 0.98);
+      border: 1px solid rgba(255, 102, 0, 0.3);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+      display: none;
+      min-width: 150px;
+      z-index: 1000;
+      overflow: hidden;
+    }
+
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-item {
+      padding: 12px 16px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(255, 102, 0, 0.2);
+      color: #ff6600;
+    }
+
+    .dropdown-item.danger {
+      color: #ff6b6b;
+    }
+
+    .dropdown-item.danger:hover {
+      background: rgba(255, 107, 107, 0.2);
+      color: #ff8888;
+    }
+
+    .card-status {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #ccc;
+    }
+
+    .status-label {
+      color: #999;
+    }
+
+    .status-value {
+      color: #ff6600;
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      color: #555;
+      margin-bottom: 16px;
+    }
+
+    .empty-state-text {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .empty-state-desc {
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: rgba(30, 30, 30, 0.98);
+      border-radius: 12px;
+      padding: 30px;
+      border: 2px solid rgba(255, 102, 0, 0.2);
+      backdrop-filter: blur(10px);
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      color: #ff6600;
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: #ccc;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: rgba(255, 102, 0, 0.2);
+      color: #ff6600;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      color: #ccc;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .form-control {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 102, 0, 0.2);
+      border-radius: 8px;
+      padding: 12px 15px;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      color: #fff;
+      width: 100%;
+    }
+
+    .form-control:focus {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: #ff6600;
+      box-shadow: 0 0 0 4px rgba(255, 102, 0, 0.1);
+      color: #fff;
+      outline: none;
+    }
+
+    .form-control::placeholder {
+      color: #666;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .modal-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+    }
+
+    .modal-btn-primary {
+      background: linear-gradient(135deg, #ff6600 0%, #ff8c33 100%);
+      color: white;
+    }
+
+    .modal-btn-primary:hover {
+      background: linear-gradient(135deg, #ff8c33 0%, #ffaa66 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(255, 102, 0, 0.3);
+    }
+
+    .modal-btn-secondary {
+      background: transparent;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      color: #ccc;
+    }
+
+    .modal-btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #fff;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .header-content {
+        width: 100%;
+      }
+
+      .add-agent-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .agents-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-content {
+        width: 95%;
+      }
+    }
+  </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <div>
-      <h1>Stabvest Homepage</h1>
-      <p class="lead">This homepage is your central hub. Use the links below to access the various dashboards.</p>
-    </div>
-  </header>
-
-  <section class="dashboard-links">
-    <a href="incidents">Incidents Dashboard</a>
-    <a href="agents">Agents Dashboard</a>
-    <a href="messages">Messages Dashboard</a>
-    <a href="deployment">Deployment Dashboard</a>
-    <a href="management">Management Dashboard</a>
-  </section>
-
-  <section class="stats-grid">
-    <div class="stat-card">
-      <h3>Agents</h3>
-      <p class="desc">Total number of agents registered on the server. Displays how many are active and how many are considered stale (not reporting recently).</p>
-      <p class="value" id="agentsCount">Loading...</p>
-      <p class="desc">Active agents: <span id="agentsActive">Loading...</span></p>
-      <p class="desc">Stale agents: <span id="agentsStale">Loading...</span></p>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <img src="{{ url_for('static', filename='RIT Tiger.png') }}" alt="RIT Tiger" class="logo-img">
+        <div class="header-text">
+          <h1>Password Manager</h1>
+        </div>
+      </div>
+      <button class="add-agent-btn" onclick="openAddAgentModal()">
+        <i class="bi bi-plus-lg"></i>Add Agent
+      </button>
     </div>
 
-    <div class="stat-card">
-      <h3>Incidents</h3>
-      <p class="desc">Total number of incidents recorded. Incidents are categorized as New, Active, or Closed.</p>
-      <p class="value" id="incidentsTotal">Loading...</p>
-      <p class="desc">New: <span id="incidentsNew">Loading...</span></p>
-      <p class="desc">Active: <span id="incidentsActive">Loading...</span></p>
-      <p class="desc">Closed: <span id="incidentsClosed">Loading...</span></p>
+    <!-- Agents Grid -->
+    <div class="agents-grid" id="agentsGrid">
+      <!-- Agent cards will be inserted here by JavaScript -->
     </div>
 
-    <div class="stat-card">
-      <h3>Messages</h3>
-      <p class="desc">Total messages received from agents and their status updates. Shows recent activity within the last 5 minutes.</p>
-      <p class="value" id="messagesTotal">Loading...</p>
-      <p class="desc">Received in last 5 minutes: <span id="messagesLast5">Loading...</span></p>
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-state-icon">
+        <i class="bi bi-inbox"></i>
+      </div>
+      <div class="empty-state-text">No agents registered</div>
+      <div class="empty-state-desc">Click "Add Agent" to register a new agent</div>
     </div>
+    
+    <!-- Agent Detail View (hidden until a card is clicked) -->
+    <div id="agentDetailView" style="display:none;margin-top:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;">
+        <div>
+          <button class="add-agent-btn" onclick="closeAgentDetail()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.06);text-transform:none;padding:8px 12px;">
+            <i class="bi bi-arrow-left"></i> Back
+          </button>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <h2 id="detailHeader" style="margin:0;color:#ff6600;"></h2>
+        </div>
+        <div style="width:120px"></div>
+      </div>
 
-    <div class="stat-card">
-      <h3>Users</h3>
-      <p class="desc">Number of users registered in the system, including counts per role (guest, analyst, admin).</p>
-      <p class="value" id="usersTotal">Loading...</p>
-      <p class="desc">Roles: <span id="usersRoles">Loading...</span></p>
+      <div id="usersList" style="display:flex;flex-direction:column;gap:12px;"></div>
     </div>
+  </div>
 
-    <div class="stat-card">
-      <h3>Tokens</h3>
-      <p class="desc">Total number of authentication tokens issued for agents.</p>
-      <p class="value" id="tokensTotal">Loading...</p>
+  <!-- Add Agent Modal -->
+  <div class="modal-overlay" id="addAgentModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Agent</h2>
+        <button class="modal-close" onclick="closeAddAgentModal()">
+          <i class="bi bi-x"></i>
+        </button>
+      </div>
+      <form id="addAgentForm" onsubmit="handleAddAgent(event)">
+        <div class="form-group">
+          <label for="agentIp" class="form-label">Agent IP Address</label>
+          <input 
+            type="text" 
+            id="agentIp" 
+            class="form-control" 
+            placeholder="e.g., 192.168.1.100" 
+            required
+          >
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-secondary" onclick="closeAddAgentModal()">
+            Cancel
+          </button>
+          <button type="submit" class="modal-btn modal-btn-primary">
+            Add Agent
+          </button>
+        </div>
+      </form>
     </div>
-  </section>
-</div>
+  </div>
 
-<div id="toast" class="toast">Server statistics updated successfully</div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let agents = [];
 
-<script>
-const ENDPOINTS = {
-  listAgents: '/list_agents',
-  listIncidents: '/list_incidents',
-  listMessages: '/list_messages',
-  listUsers: '/list_users_simple',
-  listTokens: '/list_tokens_number'
-};
+    async function fetchAgents() {
+      try {
+        const response = await fetch('/get_clients', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        agents = data.clients || [];
+        renderAgents();
+      } catch (err) {
+        console.error('Error fetching agents:', err);
+      }
+    }
 
-const toastEl = document.getElementById('toast');
+    function renderAgents() {
+      const grid = document.getElementById('agentsGrid');
+      const emptyState = document.getElementById('emptyState');
 
-async function postJSON(url,payload){
-  try{
-    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-    if(!res.ok){const txt=await res.text();throw new Error(`HTTP ${res.status}: ${txt}`);}
-    const ct = res.headers.get('content-type')||'';
-    if(ct.includes('application/json')) return res.json();
-    return res.text();
-  }catch(err){alert('Failed request: '+err.message); throw err;}
-}
+      if (agents.length === 0) {
+        grid.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+      }
 
-function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
-function updateStatsElement(id,value){document.getElementById(id).innerHTML=value;}
+      grid.style.display = 'grid';
+      emptyState.style.display = 'none';
 
-async function fetchStats(){
-  try{
-    // Agents
-    const agents = await postJSON(ENDPOINTS.listAgents,{});
-    const totalAgents = Object.keys(agents).length;
-    const active = Object.values(agents).filter(a=>a.lastStatus).length;
-    const stale = Object.values(agents).filter(a=>a.stale).length;
-    updateStatsElement('agentsCount', totalAgents);
-    updateStatsElement('agentsActive', active);
-    updateStatsElement('agentsStale', stale);
+      grid.innerHTML = agents.map((agent, index) => {
+        // Build extra info rows dynamically from additional fields
+        let extraHtml = '';
+        for (const [k, v] of Object.entries(agent)) {
+          if (k === 'ip_address' || k === 'status') continue;
+          extraHtml += `<div class="status-item"><span class="status-label">${k.replace(/_/g,' ')}:</span><span class="status-value">${v===null||v===undefined? 'N/A' : v}</span></div>`;
+        }
 
-    // Incidents
-    const incidents = await postJSON(ENDPOINTS.listIncidents,{});
-    const totalInc = Object.keys(incidents).length;
-    const newInc = Object.values(incidents).filter(i=>i.tag==='New').length;
-    const activeInc = Object.values(incidents).filter(i=>i.tag==='Active').length;
-    const closedInc = Object.values(incidents).filter(i=>i.tag==='Closed').length;
-    updateStatsElement('incidentsTotal', totalInc);
-    updateStatsElement('incidentsNew', newInc);
-    updateStatsElement('incidentsActive', activeInc);
-    updateStatsElement('incidentsClosed', closedInc);
+        return `
+        <div class="agent-card" onclick="window.location.href='/agent?ip=' + encodeURIComponent('${agent.ip_address}')">
+          <div class="card-header-row">
+            <div class="card-title">${agent.ip_address}</div>
+            <div class="card-menu" onclick="event.stopPropagation()">
+              <button class="menu-btn" onclick="toggleMenu(${index}, event)">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="dropdown-menu" id="menu-${index}">
+                <button class="dropdown-item" onclick="resetToken('${agent.ip_address}')">
+                  <i class="bi bi-arrow-clockwise"></i>
+                  Reset Token
+                </button>
+                <button class="dropdown-item danger" onclick="removeAgent('${agent.ip_address}')">
+                  <i class="bi bi-trash"></i>
+                  Remove Client
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="card-status">
+            <div class="status-item">
+              <span class="status-label">Status:</span>
+              <span class="status-value">${agent.status}</span>
+            </div>
+            ${extraHtml}
+          </div>
+        </div>`;
+      }).join('');
+    }
 
-    // Messages
-    const messages = await postJSON(ENDPOINTS.listMessages,{});
-    const totalMsgs = Object.keys(messages).length;
-    const last5Min = Object.values(messages).filter(m=>Date.now()/1000 - m.timestamp <= 300).length;
-    updateStatsElement('messagesTotal', totalMsgs);
-    updateStatsElement('messagesLast5', last5Min);
+    function toggleMenu(index) {
+      const menu = document.getElementById(`menu-${index}`);
+      // Close all other menus
+      document.querySelectorAll('.dropdown-menu').forEach((m, i) => {
+        if (i !== index) m.classList.remove('show');
+      });
+      menu.classList.toggle('show');
+      
+      // Close menu when clicking outside
+      document.addEventListener('click', function closeMenu(e) {
+        if (!e.target.closest('.card-menu')) {
+          menu.classList.remove('show');
+          document.removeEventListener('click', closeMenu);
+        }
+      });
+    }
 
-    // Users
-    const users = await postJSON(ENDPOINTS.listUsers,{});
-    const totalUsers = Object.keys(users).length;
-    const roles = {};
-    for(const r of Object.values(users)) roles[r] = (roles[r]||0)+1;
-    updateStatsElement('usersTotal', totalUsers);
-    updateStatsElement('usersRoles', Object.entries(roles).map(([k,v])=>`${k}: ${v}`).join(', '));
+    // Open agent detail view
+    async function openAgentDetail(ipAddress) {
+      try {
+        document.querySelector('.dashboard-container').style.display = 'none';
+        const detail = document.getElementById('agentDetailView');
+        detail.style.display = 'block';
+        document.getElementById('detailHeader').innerText = `Agent: ${ipAddress}`;
+        const usersList = document.getElementById('usersList');
+        usersList.innerHTML = '<div class="empty-state-text">Loading users...</div>';
 
-    // Tokens
-    const tokens = await postJSON(ENDPOINTS.listTokens,{});
-    updateStatsElement('tokensTotal', tokens.number);
+        const resp = await fetch(`/get_users?ip_address=${encodeURIComponent(ipAddress)}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const users = data.users || [];
 
-    showToast();
-  }catch(err){console.error(err);}
-}
+        if (users.length === 0) {
+          usersList.innerHTML = '<div class="empty-state-text">No users found for this agent</div>';
+          return;
+        }
 
-// Initial fetch and auto-refresh every 60 seconds
-fetchStats();
-setInterval(fetchStats, 60000);
-</script>
+        usersList.innerHTML = users.map((u, i) => `
+          <div style="background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="flex:1;">
+              <div style="font-weight:700;color:#ff6600">${u.username}</div>
+              <div style="font-size:13px;color:#ccc">Password set: ${u.password_exists ? 'Yes' : 'No'}</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="modal-btn modal-btn-secondary" onclick="revealPassword('${u.username}')">Reveal</button>
+              <button class="modal-btn modal-btn-primary" onclick="setPassword('${u.username}')">Set Password</button>
+            </div>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        console.error('Error opening agent detail:', err);
+        alert('Failed to load agent users');
+      }
+    }
+
+    function closeAgentDetail(){
+      document.getElementById('agentDetailView').style.display = 'none';
+      document.querySelector('.dashboard-container').style.display = '';
+    }
+
+    // Dummy reveal/set implementations
+    function revealPassword(username){
+      alert(`Password for ${username}: ******** (dummy)`);
+    }
+
+    function setPassword(username){
+      const pw = prompt(`Set new password for ${username} (dummy):`,'hunter2');
+      if(pw!==null){
+        alert(`Password for ${username} set to: ${pw} (dummy)`);
+      }
+    }
+
+    async function removeAgent(ipAddress) {
+      if (confirm(`Remove agent ${ipAddress}?`)) {
+        try {
+          const formData = new FormData();
+          formData.append('ip_address', ipAddress);
+          const response = await fetch('/remove_client', {
+            method: 'POST',
+            body: formData
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          await fetchAgents();
+        } catch (err) {
+          console.error('Error removing agent:', err);
+          alert('Failed to remove agent');
+        }
+      }
+    }
+
+    async function resetToken(ipAddress) {
+      try {
+        const formData = new FormData();
+        formData.append('ip_address', ipAddress);
+        const response = await fetch('/reset_client_token', {
+          method: 'POST',
+          body: formData
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await fetchAgents();
+        alert(`Token reset for ${ipAddress}`);
+      } catch (err) {
+        console.error('Error resetting token:', err);
+        alert('Failed to reset token');
+      }
+    }
+
+    function openAddAgentModal() {
+      document.getElementById('addAgentModal').classList.add('show');
+    }
+
+    function closeAddAgentModal() {
+      document.getElementById('addAgentModal').classList.remove('show');
+      document.getElementById('addAgentForm').reset();
+    }
+
+    async function handleAddAgent(event) {
+      event.preventDefault();
+      const ip = document.getElementById('agentIp').value.trim();
+      
+      if (!ip) {
+        alert('Please enter an IP address');
+        return;
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('ip_address', ip);
+        const response = await fetch('/add_client', {
+          method: 'POST',
+          body: formData
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await fetchAgents();
+        closeAddAgentModal();
+      } catch (err) {
+        console.error('Error adding agent:', err);
+        alert('Failed to add agent');
+      }
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('addAgentModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeAddAgentModal();
+      }
+    });
+
+    // Initial load and refresh every 10 seconds
+    fetchAgents();
+    setInterval(fetchAgents, 10000);
+  </script>
 </body>
 </html>

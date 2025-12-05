@@ -47,69 +47,26 @@ def get_local_users():
     except Exception as e:
         print(f"Error retrieving users: {e}", file=sys.stderr)
         return []
-
-def encrypt_message_pub_key(public_key, message: str) -> bytes:
-    if not isinstance(message, str):
-        raise TypeError("Message must be a string.")
-    try:
-        ciphertext = public_key.encrypt(
-            message.encode('utf-8'),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return ciphertext
-    except Exception as e:
-        raise RuntimeError(f"Encryption failed: {e}")
-
-def decrypt_message_private_key(private_key, ciphertext: bytes) -> str:
-    if not isinstance(ciphertext, bytes):
-        raise TypeError("Ciphertext must be bytes.")
-    try:
-        plaintext = private_key.decrypt(
-            ciphertext,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return plaintext.decode('utf-8')
-    except Exception as e:
-        raise RuntimeError(f"Decryption failed: {e}")
     
 
 if __name__ == '__main__':
-    global SERVER_PUB_KEY
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-    public_key = private_key.public_key()
     local_ip_address = "1.1.1.1"
 
     data = {
         'ip_address': local_ip_address,
-        'pub_key': public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
     }
     output = requests.post('http://localhost:6767/register_client', data=data)
-
-    SERVER_PUB_KEY = serialization.load_pem_public_key(output.content)
-
+    token = output.text
 
     # get all local users on the system
     local_user_list = get_local_users()
 
     # while True:
-    local_users = {
+    data = {
         'local_users': ','.join(local_user_list),
-        'ip_address': local_ip_address
+        'ip_address': local_ip_address,
+        'authoriztion_token': output.text
     }
-    requests.post('http://localhost:6767/update_local_users', data=local_users)
+    requests.post('http://localhost:6767/update_local_users', data=data)
 
     sleep(5)
