@@ -20,7 +20,7 @@ def main():
 
     print("=== Running Nuitka ===")
     nuitka_cmd = [
-        "python", "-m", "nuitka",
+        "sudo", "/home/james/password-manager/venv/bin/python3", "-m", "nuitka",
         SERVER_FILE,
         *NUITKA_ARGS,
     ]
