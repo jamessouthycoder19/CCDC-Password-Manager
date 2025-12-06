@@ -92,6 +92,7 @@ def init_db():
         ip_address TEXT NOT NULL,
         username   TEXT NOT NULL,
         password   TEXT,
+        claimed    INTEGER DEFAULT 1,
         PRIMARY KEY (ip_address, username)
     );
                      
@@ -140,8 +141,8 @@ def validate_app_user(username, password):
 def add_stored_password(ip_address, username, password_value):
     db = get_db()
     db.execute(
-        "INSERT OR REPLACE INTO passwords (ip_address, username, password) VALUES (?, ?, ?)",
-        (ip_address, username, password_value)
+        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed) VALUES (?, ?, ?, ?)",
+        (ip_address, username, password_value, 0)
     )
     db.commit()
 
@@ -367,6 +368,39 @@ def get_user_password():
 
 ##################### Client APIs #########################
 
+@app.route("/get_passwords_to_claim", methods=["POST"])
+def get_passwords_to_claim():
+    ip_address = request.form.get("ip_address")
+    token = request.form.get("authoriztion_token")
+    # Check auth
+    if not token:
+        return "Missing authorization token", 400
+    db = get_db()
+    row = db.execute(
+        "SELECT token FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if not row or row['token'] != token:
+        return "Unauthorized", 401
+    if not ip_address:
+        return "Missing ip_address", 400
+    rows = db.execute(
+        "SELECT username, password FROM passwords WHERE ip_address = ? AND claimed = 0",
+        (ip_address,)
+    ).fetchall()
+    users = []
+    for row in rows:
+        users.append({
+            'username': row['username'],
+            'password': decrypt_data(row['password']),
+        })
+        db.execute(
+            "UPDATE passwords SET claimed = 1 WHERE ip_address = ? AND username = ?",
+            (ip_address, row['username'])
+        )
+    db.commit()
+    return {'users': users}, 200
+
 @app.route("/update_local_users", methods=["POST"])
 def update_local_users():
     ip_address = request.form.get("ip_address")
@@ -425,7 +459,7 @@ def register_client():
             return token, 200
     db.commit()
 
-    return "OK", 200
+    return "Client not available for registration", 400
 
 if __name__ == '__main__':
     with app.app_context():

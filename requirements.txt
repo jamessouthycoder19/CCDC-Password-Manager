@@ -1,5 +1,6 @@
 flask
-flask_login
+Flask-Login
 # sqlite3
 argon2-cffi
 cryptography
+requests

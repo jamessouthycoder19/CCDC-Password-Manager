@@ -260,8 +260,9 @@
       background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(4px);
       z-index: 2000;
-      align-items: center;
+      align-items: flex-start; /* raise modal vertically */
       justify-content: center;
+      padding-top: 15vh; /* shift modal down ~15% */
     }
 
     .modal-overlay.show {
