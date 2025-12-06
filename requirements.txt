@@ -3,3 +3,4 @@ flask_login
 # sqlite3
 argon2-cffi
 cryptography
+nuitka
