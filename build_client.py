@@ -20,7 +20,7 @@ def main():
 
     print("=== Running Nuitka ===")
     nuitka_cmd = [
-        "python3", "-m", "nuitka",
+        "python", "-m", "nuitka",
         SERVER_FILE,
         *NUITKA_ARGS,
     ]

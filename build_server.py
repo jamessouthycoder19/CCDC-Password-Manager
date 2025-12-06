@@ -9,7 +9,7 @@ import re
 # -----------------------------
 SOURCE_TEMPLATES = "templates"
 SOURCE_STATIC = "static"
-BUILD_DIR = "sever_build_assets"
+BUILD_DIR = "."
 
 SERVER_FILE = "server.py"
 NUITKA_ARGS = [
