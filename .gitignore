@@ -1,4 +1,4 @@
-password_manager.db
+# password_manager.db
 *.pem
 venv/
 

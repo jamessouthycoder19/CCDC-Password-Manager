@@ -1,0 +1,8 @@
+name: password-manager
+services:
+  password-manager:
+    build: .
+    volumes:
+      - ./password_manager.db:/password-manager/password_manager.db
+    ports:
+      - "443:443"
