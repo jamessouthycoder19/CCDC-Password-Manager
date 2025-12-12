@@ -1,5 +1,4 @@
 password_manager.db
-*.pem
 venv/
 
 # Byte-compiled / optimized / DLL files

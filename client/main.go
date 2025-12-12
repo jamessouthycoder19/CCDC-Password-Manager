@@ -13,7 +13,17 @@ import (
 	"io"
 	"reflect"
 	"time"
+	"encoding/json"
 )
+
+type User struct {
+    Password string `json:"password"`
+    Username string `json:"username"`
+}
+
+type passwordJson struct {
+    Users []User `json:"users"`
+}
 
 func getLocalUsers() []string {
 	if runtime.GOOS == "linux" {
@@ -106,7 +116,6 @@ func main() {
 	if is_dc {
 		fmt.Println("hi")
 	}
-	fmt.Println(local_ip)
 
 	server_ip_address := "127.0.0.1"
 
@@ -115,12 +124,10 @@ func main() {
 
 	resp, _ := http.PostForm("https://" + server_ip_address + "/register_client",form)
 	defer resp.Body.Close()
-
 	body, _ := io.ReadAll(resp.Body)
 	token := string(body)
 
 	local_users := getLocalUsers()
-	fmt.Println(strings.Join(local_users, ","))
 	i := 0
 
 	form = url.Values{}
@@ -134,8 +141,6 @@ func main() {
 		i += 1
 		if i % 10 == 0 {
 			new_local_user_list := getLocalUsers()
-			fmt.Println(new_local_user_list)
-			fmt.Println(local_users)
 			if !reflect.DeepEqual(new_local_user_list, local_users) {
 				diff := difference(new_local_user_list, local_users)
 				
@@ -155,10 +160,16 @@ func main() {
 		form.Add("authoriztion_token", token)
 
 		resp, _ = http.PostForm("https://" + server_ip_address + "/get_passwords_to_claim",form)
-
-		if len(resp) != 0 {
-			// user_passwords = 
-			// TODO, translate password changing logic
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		
+		if len(body) != 0 {
+			var userPasswords passwordJson
+			json.Unmarshal(body, &userPasswords)
+			for _, userToChangePassword := range userPasswords.Users {
+				fmt.Println(userToChangePassword.Username)
+				fmt.Println(userToChangePassword.Password)
+			}
 		}
 
 		time.Sleep(5 * time.Second)
