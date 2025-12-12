@@ -1,7 +1,6 @@
 flask
-Flask-Login
+flask-login
 # sqlite3
 argon2-cffi
 cryptography
 requests
-nuitka
