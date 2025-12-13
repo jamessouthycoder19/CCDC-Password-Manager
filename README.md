@@ -4,7 +4,7 @@ This tool was made to attempt to un-gamify our tools. The password_manager.db is
 
 To run the server
 ```
-$ sudo docker compose up
+sudo docker compose up
 ```
 
 To compile the agents

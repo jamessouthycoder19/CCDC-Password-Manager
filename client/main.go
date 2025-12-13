@@ -48,7 +48,7 @@ func getLocalUsers() []string {
 
 		// Get rid of computer accounts on AD, which contain $
 		for _, user := range users {
-			if !strings.Contains(user, "$") {
+			if !strings.Contains(user, "$") && len(strings.TrimSpace(user)) > 0{
 				new_users = append(new_users, user)
 			}
 		}
@@ -105,7 +105,7 @@ func main() {
 	} else {
 		cmd := exec.Command("powershell.exe", "-c", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like \"*Ethernet*\" }).IPAddress")
 		output, _ := cmd.Output()
-		local_ip = string(output)
+		local_ip = strings.TrimSpace(string(output))
 		cmd = exec.Command("powershell.exe", "-c", "Get-WmiObject -Query 'select * from Win32_OperatingSystem where (ProductType = \"2\")'")
 		output, _ = cmd.Output()
 		fmt.Println(len(output))
@@ -113,12 +113,8 @@ func main() {
 			is_dc = true
 		}
 	}
-	if is_dc {
-		fmt.Println("hi")
-	}
 
-	server_ip_address := "127.0.0.1"
-
+	server_ip_address := "192.168.1.18"
 	form := url.Values{}
 	form.Add("ip_address", local_ip)
 
@@ -143,6 +139,8 @@ func main() {
 			new_local_user_list := getLocalUsers()
 			if !reflect.DeepEqual(new_local_user_list, local_users) {
 				diff := difference(new_local_user_list, local_users)
+
+				fmt.Println(diff)
 				
 				local_users = new_local_user_list
 
@@ -167,11 +165,23 @@ func main() {
 			var userPasswords passwordJson
 			json.Unmarshal(body, &userPasswords)
 			for _, userToChangePassword := range userPasswords.Users {
-				fmt.Println(userToChangePassword.Username)
-				fmt.Println(userToChangePassword.Password)
+				if runtime.GOOS == "linux" {
+					cmd := exec.Command("sudo", "chpasswd")
+					input := fmt.Sprintf("%s:%s", userToChangePassword.Username, userToChangePassword.Password)
+					cmd.Stdin = strings.NewReader(input)
+					cmd.Run()
+				} else {
+					if is_dc {
+						cmd := exec.Command("powershell.exe", "-c", "Set-ADAccountPassword -Identity \"" +  userToChangePassword.Username +"\" -Reset -NewPassword (ConvertTo-SecureString \"" + userToChangePassword.Password + "\" -AsPlainText -Force)")
+						cmd.Run()
+					} else {
+						cmd := exec.Command("powershell.exe", "-c", "Set-LocalUser -Name \"" + userToChangePassword.Username + "\" -Password (ConvertTo-SecureString \"" + userToChangePassword.Password + "\" -AsPlainText -Force)")
+						cmd.Run()
+					}
+				}
 			}
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
