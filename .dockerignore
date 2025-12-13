@@ -1,6 +1,3 @@
-build_client.py
-client.py
-docker-compose.py
-dockerfile
 password_manager.db
 README.md
+client/
