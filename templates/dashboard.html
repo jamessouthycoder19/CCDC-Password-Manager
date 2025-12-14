@@ -90,6 +90,30 @@
       transform: translateY(0);
     }
 
+    .logout-btn {
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #dc3545 0%, #e5535a 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+
+    .logout-btn:hover {
+      background: linear-gradient(135deg, #e5535a 0%, #ff6b6b 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(220, 53, 69, 0.25);
+      color: white;
+    }
+
     .agents-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -427,9 +451,14 @@
           <h1>Password Manager</h1>
         </div>
       </div>
-      <button class="add-agent-btn" onclick="openAddAgentModal()">
-        <i class="bi bi-plus-lg"></i>Add Agent
-      </button>
+      <div class="header-actions" style="display:flex;gap:12px;align-items:center;">
+        <button class="add-agent-btn" onclick="openAddAgentModal()">
+          <i class="bi bi-plus-lg"></i>Add Agent
+        </button>
+        <button class="logout-btn" onclick="window.location.href='/logout'">
+          <i class="bi bi-box-arrow-right"></i>Logout
+        </button>
+      </div>
     </div>
 
     <!-- Agents Grid -->

@@ -1,30 +1,28 @@
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from flask import Flask, request, render_template, redirect, url_for, flash, session, g
-from datetime import timedelta
-import os
 from urllib.parse import urlparse, unquote_plus
-import sqlite3
-from argon2 import PasswordHasher
-import hashlib
+
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
+from argon2 import PasswordHasher
 
-
-# ============= Set Flask Config ========================
-app = Flask(__name__)
-app.config.update(
-    SECRET_KEY=os.urandom(32), # Randomize the key every startup to avoid cookie reuse
-    #SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS. TODO
-    SESSION_COOKIE_HTTPONLY=True, # Prevents JavaScript from accessing the session cookie
-    SESSION_COOKIE_SAMESITE="Strict", # "Strict": the cookie is only sent for requests from the same site (no subdomains)
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=1),
-    SESSION_REFRESH_EACH_REQUEST=True # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
-)
+from datetime import timedelta, datetime
+import os
+import sqlite3
+import hashlib
+import threading
+import time
 
 ######################### Setup important local Variables #########################
 
 ENCRYPTION_KEY = ""
+ENCRYPTION_KEY_LOCK = threading.Lock()
+
+LOGGED_IN_USER_STATES_EXPIRATION = []
+LOGGED_IN_USER_STATES_EXPIRATION_LOCK = threading.Lock()
+
+SESSION_STATE_LENGTH = 30
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -33,11 +31,49 @@ login_manager.login_view = 'login'
 
 password_hasher = PasswordHasher()
 
+######################### Setup Flask Config #########################
+app = Flask(__name__)
+app.config.update(
+    SECRET_KEY=os.urandom(32), # Randomize the key used to sign cookies on every startup
+    SESSION_COOKIE_SECURE=True, # HTTPS Only
+    SESSION_COOKIE_HTTPONLY=True, # Prevents JavaScript from accessing the session cookie
+    SESSION_COOKIE_SAMESITE="Strict", # CSRF prevention
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=SESSION_STATE_LENGTH), # Cookie only lasts 30 minutes
+    SESSION_REFRESH_EACH_REQUEST=False # Don't refresh the cookie afer every request (force the cookie to only last 30 minutes)
+)
+
+######################### Thread used to manage state of Encryption key #########################
+
+def validate_encryption_key_state():
+    # This zeros out the encryption key if there are no currently logged in users.
+    global ENCRYPTION_KEY
+    global ENCRYPTION_KEY_LOCK
+    global LOGGED_IN_USER_STATES_EXPIRATION
+    global LOGGED_IN_USER_STATES_EXPIRATION_LOCK
+
+    while True:
+        with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
+            while len(LOGGED_IN_USER_STATES_EXPIRATION) > 0:
+                if LOGGED_IN_USER_STATES_EXPIRATION[0] < datetime.now():
+                    LOGGED_IN_USER_STATES_EXPIRATION.pop(0)
+                    if len(LOGGED_IN_USER_STATES_EXPIRATION) == 0:
+                        break
+                else:
+                    break
+
+        if len(LOGGED_IN_USER_STATES_EXPIRATION) == 0:
+            with ENCRYPTION_KEY_LOCK:
+                ENCRYPTION_KEY = ""
+
+        time.sleep(10)
+
 ####################### Helper functions #########################
 
 def encrypt_data(plaintext):
     global ENCRYPTION_KEY
-    key = ENCRYPTION_KEY.encode('utf-8')[:32]
+    global ENCRYPTION_KEY_LOCK
+    with ENCRYPTION_KEY_LOCK:
+        key = ENCRYPTION_KEY.encode('utf-8')[:32]
     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
     padder = padding.PKCS7(256).padder()
     padded_data = padder.update(plaintext.encode('utf-8')) + padder.finalize()
@@ -47,7 +83,9 @@ def encrypt_data(plaintext):
 
 def decrypt_data(ciphertext):
     global ENCRYPTION_KEY
-    key = ENCRYPTION_KEY.encode('utf-8')[:32]
+    global ENCRYPTION_KEY_LOCK
+    with ENCRYPTION_KEY_LOCK:
+        key = ENCRYPTION_KEY.encode('utf-8')[:32]
     cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
     decryptor = cipher.decryptor()
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
@@ -57,11 +95,15 @@ def decrypt_data(ciphertext):
 
 def get_encryption_key():
     global ENCRYPTION_KEY
-    return ENCRYPTION_KEY
+    global ENCRYPTION_KEY_LOCK
+    with ENCRYPTION_KEY_LOCK:
+        return ENCRYPTION_KEY
 
 def set_encryption_key(key):
     global ENCRYPTION_KEY
-    ENCRYPTION_KEY = key
+    global ENCRYPTION_KEY_LOCK
+    with ENCRYPTION_KEY_LOCK:
+        ENCRYPTION_KEY = key
 
 def get_db():
     if "db" not in g:
@@ -176,6 +218,8 @@ def load_user(id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    global LOGGED_IN_USER_STATES_EXPIRATION
+    global LOGGED_IN_USER_STATES_EXPIRATION_LOCK
     # For GET render pass the next param to template so the form includes it
     if request.method == 'GET':
         next_param = request.args.get('next', '')
@@ -197,10 +241,13 @@ def login():
         set_encryption_key(get_sha256_hash(username + password))
         session.permanent = True
 
+        with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
+            LOGGED_IN_USER_STATES_EXPIRATION.append(datetime.now() + timedelta(minutes=SESSION_STATE_LENGTH))
+
         # Validate next and redirect safely
         if is_safe_path(next_param):
             return redirect(unquote_plus(next_param))
-        return redirect(url_for('page_dashboard'))
+        return redirect(url_for('dashboard'))
 
     else:
         username = request.form.get('username')
@@ -212,10 +259,13 @@ def login():
             set_encryption_key(get_sha256_hash(username + password))
             session.permanent = True
 
+            with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
+                LOGGED_IN_USER_STATES_EXPIRATION.append(datetime.now() + timedelta(minutes=SESSION_STATE_LENGTH))
+
             # Validate next and redirect safely
             if is_safe_path(next_param):
                 return redirect(unquote_plus(next_param))
-            return redirect(url_for('page_dashboard'))
+            return redirect(url_for('dashboard'))
 
         flash('Invalid username or password', 'danger')
     return render_template('login.html', next=next_param)
@@ -223,7 +273,10 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    set_encryption_key("")
+    global LOGGED_IN_USER_STATES_EXPIRATION
+    global LOGGED_IN_USER_STATES_EXPIRATION_LOCK
+    with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
+        LOGGED_IN_USER_STATES_EXPIRATION.pop(0)
     logout_user()
     return redirect(url_for('login'))
 
@@ -233,7 +286,7 @@ def logout():
 @app.route("/")
 @app.route("/dashboard")
 @login_required
-def page_dashboard():
+def dashboard():
     return render_template("dashboard.html")
 
 @login_required
@@ -347,7 +400,7 @@ def set_user_password():
         return "Missing ip_address, username, or password_value", 400
     encrypted_password = encrypt_data(password_value)
     add_stored_password(ip_address, username, encrypted_password)
-    return "OK", 200\
+    return "OK", 200
     
 @login_required
 @app.route("/get_user_password", methods=["GET"])
@@ -465,4 +518,11 @@ if __name__ == '__main__':
     with app.app_context():
         clear_db()
         init_db()
-    app.run(host="0.0.0.0", port=443, debug=True, ssl_context='adhoc')
+
+    key_management_thread = threading.Thread(
+        target=validate_encryption_key_state,
+        daemon=True
+    )
+    key_management_thread.start()
+    
+    app.run(host="0.0.0.0", port=443, debug=False, ssl_context='adhoc')
