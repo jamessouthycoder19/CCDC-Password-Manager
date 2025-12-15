@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from argon2 import PasswordHasher
+from hashlib import pbkdf2_hmac
 
 from datetime import timedelta, datetime
 import os
@@ -16,18 +17,13 @@ import time
 
 ######################### Setup important local Variables #########################
 
+SESSION_STATE_LENGTH = 30
+
 ENCRYPTION_KEY = ""
 ENCRYPTION_KEY_LOCK = threading.Lock()
 
 LOGGED_IN_USER_STATES_EXPIRATION = []
 LOGGED_IN_USER_STATES_EXPIRATION_LOCK = threading.Lock()
-
-SESSION_STATE_LENGTH = 30
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
 
 password_hasher = PasswordHasher()
 
@@ -41,6 +37,10 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=SESSION_STATE_LENGTH), # Cookie only lasts 30 minutes
     SESSION_REFRESH_EACH_REQUEST=False # Don't refresh the cookie afer every request (force the cookie to only last 30 minutes)
 )
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 ######################### Thread used to manage state of Encryption key #########################
 
@@ -70,23 +70,18 @@ def validate_encryption_key_state():
 ####################### Helper functions #########################
 
 def encrypt_data(plaintext):
-    global ENCRYPTION_KEY
-    global ENCRYPTION_KEY_LOCK
-    with ENCRYPTION_KEY_LOCK:
-        key = ENCRYPTION_KEY.encode('utf-8')[:32]
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    cipher = Cipher(algorithms.AES(ENCRYPTION_KEY), modes.ECB(), backend=default_backend())
     padder = padding.PKCS7(256).padder()
     padded_data = padder.update(plaintext.encode('utf-8')) + padder.finalize()
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
     return ciphertext
 
-def decrypt_data(ciphertext):
-    global ENCRYPTION_KEY
-    global ENCRYPTION_KEY_LOCK
-    with ENCRYPTION_KEY_LOCK:
-        key = ENCRYPTION_KEY.encode('utf-8')[:32]
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+def decrypt_data(ciphertext, old_enc_key=None):
+    if old_enc_key is not None:
+        cipher = Cipher(algorithms.AES(old_enc_key), modes.ECB(), backend=default_backend())
+    else:
+        cipher = Cipher(algorithms.AES(ENCRYPTION_KEY), modes.ECB(), backend=default_backend())
     decryptor = cipher.decryptor()
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
     unpadder = padding.PKCS7(256).unpadder()
@@ -99,9 +94,26 @@ def get_encryption_key():
     with ENCRYPTION_KEY_LOCK:
         return ENCRYPTION_KEY
 
-def set_encryption_key(key):
+def set_encryption_key(username, password):
     global ENCRYPTION_KEY
     global ENCRYPTION_KEY_LOCK
+
+    db = get_db()
+    row = db.execute(
+        "SELECT encryption_key_salt FROM app_credentials WHERE username = ?",
+        (username,)
+    ).fetchone()
+    salt = row[0]
+    iterations = 100000
+    hash_algorithm = 'sha256'
+
+    key = hashlib.pbkdf2_hmac(
+        hash_algorithm,
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        iterations
+    )
+
     with ENCRYPTION_KEY_LOCK:
         ENCRYPTION_KEY = key
 
@@ -126,23 +138,34 @@ def init_db():
     db = get_db()
     db.executescript("""
     CREATE TABLE IF NOT EXISTS app_credentials (
-        username TEXT PRIMARY KEY,
-        password TEXT NOT NULL
+        username             TEXT PRIMARY KEY,
+        password             TEXT NOT NULL,
+        encryption_key_salt  TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS passwords (
-        ip_address TEXT NOT NULL,
-        username   TEXT NOT NULL,
-        password   TEXT,
-        claimed    INTEGER DEFAULT 1,
+        ip_address  TEXT NOT NULL,
+        username    TEXT NOT NULL,
+        password    TEXT,
+        claimed     INTEGER DEFAULT 1,
         PRIMARY KEY (ip_address, username)
     );
                      
     CREATE TABLE IF NOT EXISTS client_tokens (
-        ip_address TEXT PRIMARY KEY,
-        token      TEXT
+        ip_address  TEXT PRIMARY KEY,
+        token       TEXT
     );
     """)
+
+    row = db.execute("SELECT COUNT(*) FROM app_credentials").fetchone()
+    if row[0] == 0:
+        #starting_admin_password = os.urandom(16).hex()
+        starting_admin_password = "admin"
+        encryption_key_salt = os.urandom(16).hex()
+        print("Starting Username: admin")
+        print(f"Starting Password: {starting_admin_password}")
+        add_app_user("admin", starting_admin_password, encryption_key_salt)
+
     db.commit()
 
 def clear_db():
@@ -152,17 +175,12 @@ def clear_db():
     db.execute("DROP TABLE IF EXISTS client_tokens")
     db.commit()
 
-def get_sha256_hash(data):
-    sha256 = hashlib.sha256()
-    sha256.update(data.encode('utf-8'))
-    return sha256.hexdigest()
-
-def add_app_user(username, password):
+def add_app_user(username, password, encryption_key_salt):
     password_hash = password_hasher.hash(password)
     db = get_db()
     db.execute(
-        "INSERT OR REPLACE INTO app_credentials (username, password) VALUES (?, ?)",
-        (username, password_hash)
+        "INSERT OR REPLACE INTO app_credentials (username, password, encryption_key_salt) VALUES (?, ?, ?)",
+        (username, password_hash, encryption_key_salt)
     )
     db.commit()
 
@@ -220,25 +238,25 @@ def load_user(id):
 def login():
     global LOGGED_IN_USER_STATES_EXPIRATION
     global LOGGED_IN_USER_STATES_EXPIRATION_LOCK
+
     # For GET render pass the next param to template so the form includes it
     if request.method == 'GET':
         next_param = request.args.get('next', '')
         return render_template('login.html', next=next_param)
 
-    # POST
     # Get number of rows in app_credentials, if 0 then have user create admin account
     db = get_db()
     row = db.execute("SELECT COUNT(*) FROM app_credentials").fetchone()
 
     next_param = request.form.get('next') or request.args.get('next') or ''
 
-    if row[0] == 0:
-        username = request.form.get('username')
-        password = request.form.get('password')
-        add_app_user(username, password)
+    username = request.form.get('username')
+    password = request.form.get('password')
+
+    if validate_app_user(username, password):
         user = User(username, 'admin')
         login_user(user)
-        set_encryption_key(get_sha256_hash(username + password))
+        set_encryption_key(username, password)
         session.permanent = True
 
         with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
@@ -249,25 +267,7 @@ def login():
             return redirect(unquote_plus(next_param))
         return redirect(url_for('dashboard'))
 
-    else:
-        username = request.form.get('username')
-        password = request.form.get('password')
-
-        if validate_app_user(username, password):
-            user = User(username, 'admin')
-            login_user(user)
-            set_encryption_key(get_sha256_hash(username + password))
-            session.permanent = True
-
-            with LOGGED_IN_USER_STATES_EXPIRATION_LOCK:
-                LOGGED_IN_USER_STATES_EXPIRATION.append(datetime.now() + timedelta(minutes=SESSION_STATE_LENGTH))
-
-            # Validate next and redirect safely
-            if is_safe_path(next_param):
-                return redirect(unquote_plus(next_param))
-            return redirect(url_for('dashboard'))
-
-        flash('Invalid username or password', 'danger')
+    flash('Invalid username or password', 'danger')
     return render_template('login.html', next=next_param)
 
 @app.route('/logout')
@@ -400,6 +400,37 @@ def set_user_password():
         return "Missing ip_address, username, or password_value", 400
     encrypted_password = encrypt_data(password_value)
     add_stored_password(ip_address, username, encrypted_password)
+    return "OK", 200
+
+@login_required
+@app.route("/set_master_password", methods=["POST"])
+def set_master_password():
+    new_password = request.form.get("new_password")
+    
+    current_encryption_key = get_encryption_key()
+    set_encryption_key("admin", new_password)
+
+    db = get_db()
+
+    row = db.execute(
+        "SELECT encryption_key_salt FROM app_credentials WHERE username = ?",
+        ("admin",)
+    ).fetchone()
+    salt = row[0]
+
+    add_app_user("admin", new_password, salt)
+    
+    rows = db.execute(
+        "SELECT * FROM passwords"
+    ).fetchall()
+    for row in rows:
+        if row[2] is not None:
+            ip_address = row[0]
+            username = row[1]
+            password = decrypt_data(row[2], current_encryption_key)
+            encrypted_password = encrypt_data(password)
+            add_stored_password(ip_address, username, encrypted_password)
+    
     return "OK", 200
     
 @login_required

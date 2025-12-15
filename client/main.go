@@ -114,7 +114,7 @@ func main() {
 		}
 	}
 
-	server_ip_address := "192.168.1.18"
+	server_ip_address := "127.0.0.1"
 	form := url.Values{}
 	form.Add("ip_address", local_ip)
 
