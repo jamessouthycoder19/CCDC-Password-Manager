@@ -14,13 +14,100 @@
     .user-row{background:rgba(255,255,255,0.03);padding:14px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
     .label{color:#ccc;font-size:13px}
     .value{color:#fff;font-weight:600}
-    .btn-reveal{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff;padding:8px 12px;border-radius:6px}
-    .btn-set{background:linear-gradient(135deg,#ff6600,#ff8c33);border:none;color:#042033;padding:8px 12px;border-radius:6px}
+    /* Reveal button: like Add Agent */
+    .btn-reveal {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+    .btn-reveal:hover {
+      background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+      color: white;
+    }
+    .btn-reveal:active {
+      transform: translateY(0);
+    }
+
+    /* Set Password button: like Change Master Password */
+    .btn-set {
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #ff6600 0%, #ff8c33 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+    .btn-set:hover {
+      background: linear-gradient(135deg, #ff8c33 0%, #ffaa66 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(255, 102, 0, 0.25);
+      color: white;
+    }
+    .btn-set:active {
+      transform: translateY(0);
+    }
     .empty{color:#999;padding:40px;text-align:center}
     .password-box{background:rgba(255,102,0,0.15);border:2px solid #ff6600;padding:12px 16px;border-radius:8px;font-size:16px;font-weight:700;color:#fff;font-family:monospace;cursor:pointer;user-select:none;min-width:120px;display:none}
     .password-box:hover{background:rgba(255,102,0,0.25)}
-    .copy-toast{position:fixed;bottom:20px;right:20px;background:rgba(0,0,0,0.9);border:2px solid #ff6600;color:#fff;padding:12px 16px;border-radius:8px;font-size:14px;z-index:9999;animation:slideIn 0.3s ease-out}
-    @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
+    #toastContainer {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    .copy-toast {
+      min-width: 320px;
+      max-width: 400px;
+      margin-bottom: 0;
+      padding: 18px 28px;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1.2em;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+      opacity: 0.95;
+      animation: fadein 0.5s;
+    }
+    .toast-success { background: #28a745; }
+    .toast-danger { background: #dc3545; }
+    .toast-info { background: #007bff; }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 0.95; } }
+    .pw-status-badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.95em;
+      vertical-align: middle;
+      color: #fff;
+    }
+    .pw-status-badge-success { background: #28a745; }
+    .pw-status-badge-failed { background: #dc3545; }
+    .pw-status-badge-pending { background: #ffc107; color: #333; }
 
     /* Modal Styles (copied from dashboard Add Agent modal to match exactly) */
     .modal-overlay {
@@ -206,6 +293,195 @@
 <script>
   let currentAgentIp = null;
 
+  // Toast notification container
+  (function(){
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.position = 'fixed';
+    container.style.right = '20px';
+    container.style.bottom = '20px';
+    container.style.zIndex = '99999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column-reverse';
+    container.style.gap = '10px';
+    document.body.appendChild(container);
+  })();
+
+  // Persist notifications in localStorage so they survive navigation
+    function showToast(message, type='info', timeout=8000){
+      const container = document.getElementById('toastContainer');
+      if(!container) return;
+      const now = Date.now();
+      const expires = now + timeout;
+      // Save to localStorage
+      let toasts = [];
+      try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+      toasts.push({message, type, expires});
+      localStorage.setItem('active_toasts', JSON.stringify(toasts));
+
+      // Render
+      renderToast(message, type, expires-now);
+    }
+
+  function renderToast(message, type, timeout) {
+      const container = document.getElementById('toastContainer');
+      if(!container) return;
+      const el = document.createElement('div');
+      el.className = 'copy-toast';
+      if(type==='danger' || type==='fail') {
+        el.style.background = 'linear-gradient(135deg, #dc3545 0%, #e5535a 100%)';
+      } else if(type==='success') {
+        el.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+      } else if(type==='pending' || type==='warning' || type==='orange') {
+        el.style.background = 'linear-gradient(135deg, #ff6600 0%, #ff8c33 100%)';
+      } else {
+        el.style.background = 'rgba(0,0,0,0.9)';
+      }
+      el.style.border = '2px solid rgba(255,255,255,0.06)';
+      el.style.boxShadow = '0 8px 30px rgba(0,0,0,0.6)';
+      el.innerText = message;
+      el.style.minWidth = '320px';
+      el.style.padding = '18px 28px';
+      el.style.fontSize = '1.2em';
+      el.style.fontWeight = 'bold';
+      el.style.letterSpacing = '0.5px';
+      el.style.color = '#fff';
+      el.style.textShadow = '0 1px 2px rgba(0,0,0,0.18)';
+      el.style.borderRadius = '10px';
+      container.appendChild(el);
+      setTimeout(()=> {
+        el.remove();
+        // Remove from localStorage
+        let toasts = [];
+        try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+        toasts = toasts.filter(t => !(t.message===message && t.type===type));
+        localStorage.setItem('active_toasts', JSON.stringify(toasts));
+      }, timeout);
+    }
+
+    // On page load, restore any still-valid toasts
+    (function restoreToasts(){
+      let toasts = [];
+      try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+      const now = Date.now();
+      toasts = toasts.filter(t => t.expires > now);
+      toasts.forEach(t => renderToast(t.message, t.type, t.expires-now));
+      // Clean up expired
+      localStorage.setItem('active_toasts', JSON.stringify(toasts));
+    })();
+
+  // Status tracking by ip+username
+  const userStatus = {}; // key: ip_username, value: status
+  // Persist which terminal statuses we've already shown for users to avoid duplicate toasts across navigation
+  function _readShownStatuses(){ try{ return JSON.parse(localStorage.getItem('shown_user_statuses')||'{}'); }catch(e){return{}} }
+  function _writeShownStatuses(obj){ try{ localStorage.setItem('shown_user_statuses', JSON.stringify(obj)); }catch(e){}
+  }
+  function getShownStatus(ip, username){ const s = _readShownStatuses(); return s[`${ip}_${username}`]; }
+  function setShownStatus(ip, username, status){ const s = _readShownStatuses(); s[`${ip}_${username}`] = status; _writeShownStatuses(s); }
+  function setUserStatus(ip, username, status) {
+    const key = `${ip}_${username}`;
+    if (status === null || status === undefined) {
+      delete userStatus[key];
+    } else {
+      userStatus[key] = status;
+    }
+    updateStatusBadge(ip, username);
+  }
+  function updateStatusBadge(ip, username) {
+    const key = `${ip}_${username}`;
+    const badgeId = `status-badge-${key}`;
+    let badge = document.getElementById(badgeId);
+    if (badge) badge.remove();
+    const userRow = document.querySelector(`[data-ip="${ip}"][data-username="${username}"]`);
+    if (!userRow) return;
+    const status = userStatus[key];
+    if (status === undefined || status === null || status === 'unset') return; // Only show if status is known and not unset
+    badge = document.createElement('span');
+    badge.id = badgeId;
+    if (status == 0) {
+      badge.className = "pw-status-badge pw-status-badge-success";
+      badge.innerText = "Password Set";
+    } else if (status == 2 || status === 'pending') {
+      badge.className = "pw-status-badge pw-status-badge-pending";
+      badge.innerText = "Pending";
+    } else if (status == 1) {
+      badge.className = "pw-status-badge pw-status-badge-failed";
+      badge.innerText = "Failed";
+    }
+    userRow.querySelector('.value').appendChild(badge);
+  }
+
+  // Polling for password change status (persists via localStorage so it continues across pages)
+  const ACTIVE_POLLS = {};
+  function enqueuePoll(ip, username, attempts=5, intervalMs=10000){
+    const key = `${ip}||${username}`;
+    const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]');
+    const exists = stored.find(s => s.ip===ip && s.username===username);
+    if(!exists){
+      stored.push({ip, username, attempts});
+      localStorage.setItem('pending_pw_polls', JSON.stringify(stored));
+    }
+    if(!ACTIVE_POLLS[key]) startPollWorker(ip, username, attempts, intervalMs);
+  }
+
+  function startPollWorker(ip, username, attempts=5, intervalMs=10000){
+    const key = `${ip}||${username}`;
+    if(ACTIVE_POLLS[key]) return;
+    let remaining = attempts;
+    const doCheck = async ()=>{
+      try{
+        const resp = await fetch(`/get_users?ip_address=${encodeURIComponent(ip)}`, {headers:{'Accept':'application/json'}});
+        if(!resp.ok) throw new Error('fetch failed');
+        const data = await resp.json();
+        const users = data.users||[];
+        const u = users.find(x=>x.username===username);
+        if(!u){ remaining = 0; clearAndCleanup(); return; }
+        // If status moved from pending (2) to terminal (0 or 1) stop polling and notify
+        if(u.password_claimed!==2){
+          // per-user result: treat 0 as success (green), 1 as failure (red)
+          const isGood = (u.password_claimed===0);
+          const typ = isGood? 'success' : 'danger';
+          const txt = `${username}: ${isGood? 'Password set' : 'Password change failed'}${u.error? ' - '+u.error : ''}`;
+          // Only show toast when we haven't already shown this terminal status for this user
+          const statusKey = `${ip}_${username}`;
+          const shown = getShownStatus(ip, username);
+          if(shown !== u.password_claimed){
+            showToast(txt, typ, 10000);
+            setShownStatus(ip, username, u.password_claimed);
+            setUserStatus(ip, username, u.password_claimed);
+          }
+          remaining = 0;
+          clearAndCleanup();
+          return;
+        }
+        remaining--;
+        if(remaining<=0){ clearAndCleanup(); }
+      }catch(e){
+        remaining--;
+        if(remaining<=0) clearAndCleanup();
+      }
+    };
+    const timer = setInterval(doCheck, intervalMs);
+    ACTIVE_POLLS[key] = {timer};
+    // run immediately once
+    doCheck();
+
+    function clearAndCleanup(){
+      clearInterval(timer);
+      delete ACTIVE_POLLS[key];
+      const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]').filter(s=>!(s.ip===ip && s.username===username));
+      localStorage.setItem('pending_pw_polls', JSON.stringify(stored));
+    }
+  }
+
+  // On load resume any pending polls
+  (function resumePolls(){
+    try{
+      const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]');
+      (stored||[]).forEach(s=> startPollWorker(s.ip,s.username,s.attempts||5,10000));
+    }catch(e){}
+  })();
+
   function qs(name){
     const params = new URLSearchParams(window.location.search);
     return params.get(name);
@@ -238,9 +514,9 @@
       e.stopPropagation();
       const password = e.target.innerText;
       navigator.clipboard.writeText(password).then(() => {
-        showCopyToast();
+        showToast('✓ Copied to clipboard', 'info', 2000);
       }).catch(() => {
-        alert('Failed to copy password');
+        showToast('Failed to copy password', 'danger');
       });
     }
   });
@@ -257,11 +533,29 @@
       if(users.length===0){ container.innerHTML = '<div class="empty">No users found</div>'; return }
 
       function sanitizeName(n){ return n.replace(/[^a-z0-9_-]/gi,'_'); }
+      // show any per-user errors as toasts and include error in UI where present
+      users.forEach(u => {
+        try{
+          const statusKey = `${currentAgentIp}_${u.username}`;
+          // initialize in-memory status if server provided it
+          if(typeof u.password_claimed !== 'undefined') setUserStatus(currentAgentIp, u.username, u.password_claimed);
+          // show any per-user errors as toasts, but only once (persisted)
+          if(u.error){
+            const shown = getShownStatus(currentAgentIp, u.username);
+            if(shown !== 1){
+              showToast(`${u.username}: ${u.error}`, 'danger', 7000);
+              setShownStatus(currentAgentIp, u.username, 1);
+              setUserStatus(currentAgentIp, u.username, 1);
+            }
+          }
+        }catch(e){}
+      });
+
       container.innerHTML = users.map(u => {
         const id = sanitizeName(u.username);
         const revealBtn = u.password_exists ? `<button class="btn-reveal btn-reveal-${id}" type="button" data-action="reveal" data-username-reveal="${u.username}">Reveal</button>` : '';
         return `
-        <div class="user-row" style="margin-bottom:10px" data-username="${u.username}">
+        <div class="user-row" style="margin-bottom:10px" data-ip="${currentAgentIp}" data-username="${u.username}">
           <div style="flex:1">
             <div class="value">${u.username}</div>
           </div>
@@ -274,6 +568,19 @@
           </div>
         </div>
       `}).join('');
+
+      // Set status badges after rendering
+      users.forEach(u => {
+        if (u.password_claimed === 0) {
+          setUserStatus(currentAgentIp, u.username, 0);
+        } else if (u.password_claimed === 1) {
+          setUserStatus(currentAgentIp, u.username, 1);
+        } else if (u.password_claimed === 2) {
+          setUserStatus(currentAgentIp, u.username, 2);
+        } else {
+          setUserStatus(currentAgentIp, u.username, null);
+        }
+      });
     }catch(e){
       container.innerHTML = `<div class="empty">Failed to load users: ${e.message}</div>`;
       console.error(e);
@@ -285,7 +592,7 @@
     try {
       const resp = await fetch(`/get_user_password?ip_address=${encodeURIComponent(currentAgentIp)}&username=${encodeURIComponent(username)}`, {headers:{'Accept':'application/json'}});
       if (!resp.ok) {
-        alert('Failed to retrieve password');
+        showToast('Failed to retrieve password', 'danger');
         return;
       }
       const data = await resp.json();
@@ -306,7 +613,7 @@
       }
     } catch(e) {
       console.error('Error revealing password:', e);
-      alert('Failed to retrieve password');
+      showToast('Failed to retrieve password', 'danger');
     }
   }
 
@@ -353,18 +660,24 @@
       formData.append('ip_address', currentAgentIp);
       formData.append('username', username);
       formData.append('password_value', pw);
+      // Mark this user's shown status as 'unset' (0) when a new password attempt starts
+      try{ setShownStatus(currentAgentIp, username, 0); }catch(e){}
+      setUserStatus(currentAgentIp, username, 'pending');
+      showToast(username + `: password change submitted`, 'pending', 8000);
       const resp = await fetch('/set_user_password', { method: 'POST', body: formData });
       if (!resp.ok) {
-        alert('Failed to set password');
+        setUserStatus(currentAgentIp, username, null);
+        showToast('Failed to set password', 'danger');
         return;
       }
-      alert(`Password for ${username} set successfully!`);
       closeSetModal();
       // Reload users to update UI
       await loadUsers(currentAgentIp);
+      // start background polling to check password change status for this user
+      try{ enqueuePoll(currentAgentIp, username, 6, 10000); }catch(e){}
     } catch(e) {
       console.error('Error setting password:', e);
-      alert('Failed to set password');
+      showToast('Failed to set password', 'danger');
     }
   }
 
@@ -375,13 +688,7 @@
   })();
 
   function showCopyToast(){
-    const toast = document.createElement('div');
-    toast.className = 'copy-toast';
-    toast.innerText = '✓ Copied to clipboard';
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      toast.remove();
-    }, 2000);
+    showToast('✓ Copied to clipboard', 'info', 2000);
   }
 
 </script>

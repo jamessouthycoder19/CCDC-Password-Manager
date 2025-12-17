@@ -14,6 +14,7 @@ import sqlite3
 import hashlib
 import threading
 import time
+import json
 
 ######################### Setup important local Variables #########################
 
@@ -148,6 +149,8 @@ def init_db():
         username    TEXT NOT NULL,
         password    TEXT,
         claimed     INTEGER DEFAULT 1,
+        confirmed   INTEGER DEFAULT 3,
+        error       TEXT,
         PRIMARY KEY (ip_address, username)
     );
                      
@@ -201,8 +204,8 @@ def validate_app_user(username, password):
 def add_stored_password(ip_address, username, password_value):
     db = get_db()
     db.execute(
-        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed) VALUES (?, ?, ?, ?)",
-        (ip_address, username, password_value, 0)
+        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed, confirmed, error) VALUES (?, ?, ?, ?, ?, ?)",
+        (ip_address, username, password_value, 0, 2, None)
     )
     db.commit()
 
@@ -379,15 +382,23 @@ def get_users():
         return "Missing ip_address", 400
     db = get_db()
     rows = db.execute(
-        "SELECT username, password FROM passwords WHERE ip_address = ?",
+        "SELECT username, password, confirmed, error FROM passwords WHERE ip_address = ?",
         (ip_address,)
     ).fetchall()
+    # db.execute(
+    #     "UPDATE passwords SET confirmed = 3 WHERE ip_address = ?",
+    #     (ip_address,)
+    # )
     users = []
+    # Note: password_claimed: 0 = unsuccessful password change, 1 = successful password change, 2 = haven't heard back yet
     for row in rows:
         users.append({
             'username': row['username'],
             'password_exists': row['password'] is not None,
+            'password_claimed': row['confirmed'],
+            'error': row['error'],
         })
+    # db.commit()
     return {'users': users}, 200
 
 @login_required
@@ -398,8 +409,8 @@ def set_user_password():
     password_value = request.form.get("password_value")
     if not ip_address or not username or not password_value:
         return "Missing ip_address, username, or password_value", 400
-    encrypted_password = encrypt_data(password_value)
-    add_stored_password(ip_address, username, encrypted_password)
+
+    add_stored_password(ip_address, username, encrypt_data(password_value))
     return "OK", 200
 
 @login_required
@@ -484,6 +495,41 @@ def get_passwords_to_claim():
         )
     db.commit()
     return {'users': users}, 200
+
+@app.route("/update_password_change_status", methods=["POST"])
+def update_password_change_status():
+    ip_address = request.form.get("ip_address")
+    user_status = request.form.get("user_status")
+    token = request.form.get("authoriztion_token")
+    # Check auth
+    if not token:
+        return "Missing authorization token", 400
+    db = get_db()
+    row = db.execute(
+        "SELECT token FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if not row or row['token'] != token:
+        return "Unauthorized", 401
+    if not ip_address or not user_status:
+        return "Missing ip_address or user_status", 400
+    user_status_json = json.loads(user_status)
+    db = get_db()
+    for item in user_status_json:
+        user = item["username"]
+        status = item["status"]
+        if status == "Success":
+            db.execute(
+                "UPDATE passwords SET confirmed = 0, error = ? WHERE ip_address = ? AND username = ?",
+                (None, ip_address, user)
+            )
+        else:
+            db.execute(
+                "UPDATE passwords SET confirmed = 1, error = ? WHERE ip_address = ? AND username = ?",
+                (status, ip_address, user)
+            )
+    db.commit()
+    return "Ok", 200
 
 @app.route("/update_local_users", methods=["POST"])
 def update_local_users():

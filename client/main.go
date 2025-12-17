@@ -16,6 +16,11 @@ import (
 	"encoding/json"
 )
 
+type UserPasswordChangeStatus struct {
+    Status string `json:"status"`
+    Username string `json:"username"`
+}
+
 type User struct {
     Password string `json:"password"`
     Username string `json:"username"`
@@ -114,7 +119,7 @@ func main() {
 		}
 	}
 
-	server_ip_address := "127.0.0.1"
+	server_ip_address := "192.168.229.130"
 	form := url.Values{}
 	form.Add("ip_address", local_ip)
 
@@ -164,21 +169,48 @@ func main() {
 		if len(body) != 0 {
 			var userPasswords passwordJson
 			json.Unmarshal(body, &userPasswords)
+
+			var userPasswordChangeStatus []UserPasswordChangeStatus
+
 			for _, userToChangePassword := range userPasswords.Users {
 				if runtime.GOOS == "linux" {
 					cmd := exec.Command("sudo", "chpasswd")
 					input := fmt.Sprintf("%s:%s", userToChangePassword.Username, userToChangePassword.Password)
 					cmd.Stdin = strings.NewReader(input)
-					cmd.Run()
+					_, err := cmd.Output()
+					if err != nil {
+						userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: err.Error(), Username: userToChangePassword.Username})
+					} else {
+						userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: "Success", Username: userToChangePassword.Username})
+					}
 				} else {
 					if is_dc {
 						cmd := exec.Command("powershell.exe", "-c", "Set-ADAccountPassword -Identity \"" +  userToChangePassword.Username +"\" -Reset -NewPassword (ConvertTo-SecureString \"" + userToChangePassword.Password + "\" -AsPlainText -Force)")
-						cmd.Run()
+						_, err := cmd.Output()
+						if err != nil {
+							userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: err.Error(), Username: userToChangePassword.Username})
+						} else {
+							userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: "Success", Username: userToChangePassword.Username})
+						}
 					} else {
 						cmd := exec.Command("powershell.exe", "-c", "Set-LocalUser -Name \"" + userToChangePassword.Username + "\" -Password (ConvertTo-SecureString \"" + userToChangePassword.Password + "\" -AsPlainText -Force)")
-						cmd.Run()
+						_, err := cmd.Output()
+						if err != nil {
+							userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: err.Error(), Username: userToChangePassword.Username})
+						} else {
+							userPasswordChangeStatus = append(userPasswordChangeStatus, UserPasswordChangeStatus{Status: "Success", Username: userToChangePassword.Username})
+						}
 					}
 				}
+			}
+			if len(userPasswordChangeStatus) != 0 {
+				jsonBytes, _ := json.Marshal(userPasswordChangeStatus)
+				form = url.Values{}
+				form.Add("ip_address", local_ip)
+				form.Add("user_status", string(jsonBytes))
+				form.Add("authoriztion_token", token)
+
+				resp, _ = http.PostForm("https://" + server_ip_address + "/update_password_change_status",form)
 			}
 		}
 

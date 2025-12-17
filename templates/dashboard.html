@@ -461,6 +461,29 @@
         width: 95%;
       }
     }
+    #toastContainer {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    .copy-toast {
+      min-width: 320px;
+      max-width: 400px;
+      margin-bottom: 0;
+      padding: 18px 28px;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1.2em;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+      opacity: 0.95;
+      animation: slideIn 0.5s;
+    }
+    @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
   </style>
 </head>
 <body>
@@ -580,6 +603,159 @@
   <script>
     let agents = [];
 
+    // Toast notification container
+    (function(){
+      const container = document.createElement('div');
+      container.id = 'toastContainer';
+      container.style.position = 'fixed';
+      container.style.right = '20px';
+      container.style.bottom = '20px';
+      container.style.zIndex = '99999';
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column-reverse';
+      container.style.gap = '10px';
+      document.body.appendChild(container);
+    })();
+
+    // Persist notifications in localStorage so they survive navigation
+    function showToast(message, type='info', timeout=8000){
+      const container = document.getElementById('toastContainer');
+      if(!container) return;
+      const now = Date.now();
+      const expires = now + timeout;
+      // Save to localStorage
+      let toasts = [];
+      try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+      toasts.push({message, type, expires});
+      localStorage.setItem('active_toasts', JSON.stringify(toasts));
+
+      // Render
+      renderToast(message, type, expires-now);
+    }
+
+    function renderToast(message, type, timeout) {
+      const container = document.getElementById('toastContainer');
+      if(!container) return;
+      const el = document.createElement('div');
+      el.className = 'copy-toast';
+      if(type==='danger' || type==='fail') {
+        el.style.background = 'linear-gradient(135deg, #dc3545 0%, #e5535a 100%)';
+      } else if(type==='success') {
+        el.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+      } else if(type==='pending' || type==='warning' || type==='orange') {
+        el.style.background = 'linear-gradient(135deg, #ff6600 0%, #ff8c33 100%)';
+      } else {
+        el.style.background = 'rgba(0,0,0,0.9)';
+      }
+      el.style.border = '2px solid rgba(255,255,255,0.06)';
+      el.style.boxShadow = '0 8px 30px rgba(0,0,0,0.6)';
+      el.innerText = message;
+      el.style.minWidth = '320px';
+      el.style.padding = '18px 28px';
+      el.style.fontSize = '1.2em';
+      el.style.fontWeight = 'bold';
+      el.style.letterSpacing = '0.5px';
+      el.style.color = '#fff';
+      el.style.textShadow = '0 1px 2px rgba(0,0,0,0.18)';
+      el.style.borderRadius = '10px';
+      container.appendChild(el);
+      setTimeout(()=> {
+        el.remove();
+        // Remove from localStorage
+        let toasts = [];
+        try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+        toasts = toasts.filter(t => !(t.message===message && t.type===type));
+        localStorage.setItem('active_toasts', JSON.stringify(toasts));
+      }, timeout);
+    }
+
+    // On page load, restore any still-valid toasts
+    (function restoreToasts(){
+      let toasts = [];
+      try { toasts = JSON.parse(localStorage.getItem('active_toasts')||'[]'); } catch(e){}
+      const now = Date.now();
+      toasts = toasts.filter(t => t.expires > now);
+      toasts.forEach(t => renderToast(t.message, t.type, t.expires-now));
+      // Clean up expired
+      localStorage.setItem('active_toasts', JSON.stringify(toasts));
+    })();
+
+    // Polling helpers (mirror agent behavior) so dashboard continues polls
+    const ACTIVE_POLLS_DASH = {};
+    // Track per-user status on the dashboard to avoid duplicate toasts
+    const userStatusDash = {}; // key: ip_username -> status
+    // Persist which terminal statuses we've already shown (shared with agent)
+    function _readShownStatusesDash(){ try{ return JSON.parse(localStorage.getItem('shown_user_statuses')||'{}'); }catch(e){return{}} }
+    function _writeShownStatusesDash(obj){ try{ localStorage.setItem('shown_user_statuses', JSON.stringify(obj)); }catch(e){} }
+    function getShownStatusDash(ip, username){ const s = _readShownStatusesDash(); return s[`${ip}_${username}`]; }
+    function setShownStatusDash(ip, username, status){ const s = _readShownStatusesDash(); s[`${ip}_${username}`] = status; _writeShownStatusesDash(s); }
+    function setUserStatusDash(ip, username, status){
+      const key = `${ip}_${username}`;
+      if(status === null || status === undefined) delete userStatusDash[key];
+      else userStatusDash[key] = status;
+    }
+    function startPollWorkerDash(ip, username, attempts=5, intervalMs=10000){
+      const key = `${ip}||${username}`;
+      if(ACTIVE_POLLS_DASH[key]) return;
+      let remaining = attempts;
+      const doCheck = async ()=>{
+        try{
+          const resp = await fetch(`/get_users?ip_address=${encodeURIComponent(ip)}`, {headers:{'Accept':'application/json'}});
+          if(!resp.ok) throw new Error('fetch failed');
+          const data = await resp.json();
+          const users = data.users||[];
+          const u = users.find(x=>x.username===username);
+          if(!u){ remaining = 0; clearAndCleanup(); return; }
+          if(u.password_claimed!==2){
+            const isGood = (u.password_claimed===0);
+            const typ = isGood? 'success' : 'danger';
+              const txt = `${username}: ${isGood? 'Password set' : 'Password change failed'}${u.error? ' - '+u.error : ''}`;
+              const shown = getShownStatusDash(ip, username);
+              if(shown !== u.password_claimed){
+                showToast(txt, typ, 10000);
+                setShownStatusDash(ip, username, u.password_claimed);
+                setUserStatusDash(ip, username, u.password_claimed);
+              }
+            // update UI if visible
+            const row = document.querySelector(`#agentDetailView [data-username="${username}"]`);
+            if(row){
+              let badge = row.querySelector('.pw-status-badge');
+              if(!badge){
+                badge = document.createElement('span');
+                badge.className = 'pw-status-badge';
+                badge.style.marginLeft = '8px';
+                badge.style.padding = '6px 8px';
+                badge.style.borderRadius = '8px';
+                badge.style.fontSize = '13px';
+                badge.style.fontWeight = '700';
+                (row.querySelector('.username-title') || row.querySelector('div'))?.appendChild(badge);
+              }
+              badge.innerText = isGood? 'Success' : 'Failed';
+              badge.style.background = isGood? 'linear-gradient(90deg,#0a5a0d,#07760e)' : 'linear-gradient(90deg,#5a0a0a,#7b0c0c)';
+              badge.style.color = '#fff';
+              // reflect status in dashboard's in-memory tracker
+              setUserStatusDash(ip, username, u.password_claimed);
+            }
+            remaining = 0; clearAndCleanup(); return;
+          }
+          remaining--;
+          if(remaining<=0) clearAndCleanup();
+        }catch(e){ remaining--; if(remaining<=0) clearAndCleanup(); }
+      };
+      const timer = setInterval(doCheck, intervalMs);
+      ACTIVE_POLLS_DASH[key] = {timer};
+      doCheck();
+      function clearAndCleanup(){ clearInterval(timer); delete ACTIVE_POLLS_DASH[key]; const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]').filter(s=>!(s.ip===ip && s.username===username)); localStorage.setItem('pending_pw_polls', JSON.stringify(stored)); }
+    }
+
+    // resume any pending polls stored by agent page
+    (function resumePollsDash(){
+      try{
+        const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]');
+        (stored||[]).forEach(s=> startPollWorkerDash(s.ip,s.username,s.attempts||5,10000));
+      }catch(e){}
+    })();
+
     async function fetchAgents() {
       try {
         const response = await fetch('/get_clients', {
@@ -684,22 +860,46 @@
           return;
         }
 
-        usersList.innerHTML = users.map((u, i) => `
-          <div style="background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        // show any per-user errors as toasts (only once, determined by current status)
+        users.forEach(u => {
+          if(!u.error) return;
+          try{
+            const shown = getShownStatusDash(ipAddress, u.username);
+            if(shown !== 1){
+              showToast(`${u.username}: ${u.error}`, 'danger', 7000);
+              setShownStatusDash(ipAddress, u.username, 1);
+              setUserStatusDash(ipAddress, u.username, 1);
+            }
+          }catch(e){}
+        });
+
+        usersList.innerHTML = users.map((u, i) => {
+          return `
+          <div data-ip="${ipAddress}" data-username="${u.username}" style="background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div style="flex:1;">
-              <div style="font-weight:700;color:#ff6600">${u.username}</div>
+              <div class="username-title" style="font-weight:700;color:#ff6600">${u.username}</div>
               <div style="font-size:13px;color:#ccc">Password set: ${u.password_exists ? 'Yes' : 'No'}</div>
+              ${u.error ? `<div style=\"font-size:13px;color:#ff6b6b;margin-top:6px\">Error: ${u.error}</div>` : ''}
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <button class="modal-btn modal-btn-secondary" onclick="revealPassword('${u.username}')">Reveal</button>
               <button class="modal-btn modal-btn-primary" onclick="setPassword('${u.username}')">Set Password</button>
             </div>
           </div>
-        `).join('');
+        `}).join('');
+
+        // Set status badges after rendering
+        users.forEach(u => {
+          if (u.password_claimed === 0 || u.password_claimed === 1 || u.password_claimed === 2) {
+            setUserStatus(ipAddress, u.username, u.password_claimed);
+          } else {
+            setUserStatus(ipAddress, u.username, null);
+          }
+        });
 
       } catch (err) {
         console.error('Error opening agent detail:', err);
-        alert('Failed to load agent users');
+        showToast('Failed to load agent users', 'danger');
       }
     }
 
@@ -710,13 +910,13 @@
 
     // Dummy reveal/set implementations
     function revealPassword(username){
-      alert(`Password for ${username}: ******** (dummy)`);
+      showToast(`Password for ${username}: ******** (dummy)`, 'info', 4000);
     }
 
     function setPassword(username){
       const pw = prompt(`Set new password for ${username} (dummy):`,'hunter2');
       if(pw!==null){
-        alert(`Password for ${username} set to: ${pw} (dummy)`);
+        showToast(`Password for ${username} set to: ${pw} (dummy)`, 'info');
       }
     }
 
@@ -733,7 +933,7 @@
           await fetchAgents();
         } catch (err) {
           console.error('Error removing agent:', err);
-          alert('Failed to remove agent');
+          showToast('Failed to remove agent', 'danger');
         }
       }
     }
@@ -748,10 +948,10 @@
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         await fetchAgents();
-        alert(`Token reset for ${ipAddress}`);
+        showToast(`Token reset for ${ipAddress}`, 'info');
       } catch (err) {
         console.error('Error resetting token:', err);
-        alert('Failed to reset token');
+        showToast('Failed to reset token', 'danger');
       }
     }
 
@@ -769,7 +969,7 @@
       const ip = document.getElementById('agentIp').value.trim();
       
       if (!ip) {
-        alert('Please enter an IP address');
+        showToast('Please enter an IP address', 'danger');
         return;
       }
 
@@ -785,7 +985,7 @@
         closeAddAgentModal();
       } catch (err) {
         console.error('Error adding agent:', err);
-        alert('Failed to add agent');
+        showToast('Failed to add agent', 'danger');
       }
     }
 
@@ -815,7 +1015,7 @@
       const newPw = document.getElementById('newMasterPassword').value;
       const confirmPw = document.getElementById('confirmMasterPassword').value;
       if (newPw !== confirmPw) {
-        alert('Passwords do not match');
+        showToast('Passwords do not match', 'danger');
         return;
       }
 
@@ -830,11 +1030,11 @@
           const text = await resp.text();
           throw new Error(text || `HTTP ${resp.status}`);
         }
-        alert('Master password change request submitted');
+        showToast('Master password change request submitted', 'info');
         closeChangeMasterModal();
       } catch (err) {
         console.error('Error changing master password:', err);
-        alert('Failed to change master password');
+        showToast('Failed to change master password', 'danger');
       }
     }
 
