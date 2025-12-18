@@ -685,9 +685,20 @@
     // Track per-user status on the dashboard to avoid duplicate toasts
     const userStatusDash = {}; // key: ip_username -> status
     // Persist which terminal statuses we've already shown (shared with agent)
-    function _readShownStatusesDash(){ try{ return JSON.parse(localStorage.getItem('shown_user_statuses')||'{}'); }catch(e){return{}} }
+    function _readShownStatusesDash(){
+      try{
+        const raw = localStorage.getItem('shown_user_statuses');
+        if(!raw) return {};
+        const parsed = JSON.parse(raw);
+        if(parsed && typeof parsed === 'object') return parsed;
+        return {};
+      }catch(e){
+        return {};
+      }
+    }
     function _writeShownStatusesDash(obj){ try{ localStorage.setItem('shown_user_statuses', JSON.stringify(obj)); }catch(e){} }
     function getShownStatusDash(ip, username){ const s = _readShownStatusesDash(); return s[`${ip}_${username}`]; }
+    function hasShownStatusDash(ip, username){ const s = _readShownStatusesDash(); return Object.prototype.hasOwnProperty.call(s, `${ip}_${username}`); }
     function setShownStatusDash(ip, username, status){ const s = _readShownStatusesDash(); s[`${ip}_${username}`] = status; _writeShownStatusesDash(s); }
     function setUserStatusDash(ip, username, status){
       const key = `${ip}_${username}`;
@@ -711,9 +722,9 @@
             const typ = isGood? 'success' : 'danger';
               const txt = `${username}: ${isGood? 'Password set' : 'Password change failed'}${u.error? ' - '+u.error : ''}`;
               const shown = getShownStatusDash(ip, username);
-              if(shown !== u.password_claimed){
+              if(shown === 0){
                 showToast(txt, typ, 10000);
-                setShownStatusDash(ip, username, u.password_claimed);
+                setShownStatusDash(ip, username, 1);
                 setUserStatusDash(ip, username, u.password_claimed);
               }
             // update UI if visible
@@ -865,7 +876,8 @@
           if(!u.error) return;
           try{
             const shown = getShownStatusDash(ipAddress, u.username);
-            if(shown !== 1){
+            const hasShown = hasShownStatusDash(ipAddress, u.username);
+            if(!hasShown || String(shown) !== '1'){
               showToast(`${u.username}: ${u.error}`, 'danger', 7000);
               setShownStatusDash(ipAddress, u.username, 1);
               setUserStatusDash(ipAddress, u.username, 1);

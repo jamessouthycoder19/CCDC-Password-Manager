@@ -4,3 +4,4 @@ flask-login
 argon2-cffi
 cryptography
 requests
+numpy

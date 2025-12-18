@@ -9,6 +9,8 @@ from argon2 import PasswordHasher
 from hashlib import pbkdf2_hmac
 
 from datetime import timedelta, datetime
+import numpy as np
+import secrets
 import os
 import sqlite3
 import hashlib
@@ -27,6 +29,19 @@ LOGGED_IN_USER_STATES_EXPIRATION = []
 LOGGED_IN_USER_STATES_EXPIRATION_LOCK = threading.Lock()
 
 password_hasher = PasswordHasher()
+
+
+######################### Variables for Random Password Generation #########################
+
+# The Random Word List comes from https://github.com/nsacyber/RandPassGenerator/blob/master/RandPassGenerator/data/wordlist.txt
+RANDOM_WORD_LIST = np.load("wordlist.npy", mmap_mode="r", allow_pickle=True)
+NUMBER_RANDOM_WORDS = len(RANDOM_WORD_LIST)
+
+RANDOM_INTEGER_LIST = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+NUMBER_RANDOM_INTEGERS = len(RANDOM_INTEGER_LIST)
+
+RANDOM_SPECIAL_CHAR_LIST = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '=', '+']
+NUMBER_RANDOM_SPECIAL_CHARS = len(RANDOM_SPECIAL_CHAR_LIST)
 
 ######################### Setup Flask Config #########################
 app = Flask(__name__)
@@ -69,6 +84,15 @@ def validate_encryption_key_state():
         time.sleep(10)
 
 ####################### Helper functions #########################
+
+def generate_random_password():
+    new_password = ""
+    while len(new_password) < 13:
+        word = RANDOM_WORD_LIST[secrets.randbelow(NUMBER_RANDOM_WORDS)]
+        new_password += word.capitalize()
+    new_password += RANDOM_INTEGER_LIST[secrets.randbelow(NUMBER_RANDOM_INTEGERS)]
+    new_password += RANDOM_SPECIAL_CHAR_LIST[secrets.randbelow(NUMBER_RANDOM_SPECIAL_CHARS)]
+    return new_password
 
 def encrypt_data(plaintext):
     cipher = Cipher(algorithms.AES(ENCRYPTION_KEY), modes.ECB(), backend=default_backend())
@@ -409,6 +433,8 @@ def set_user_password():
     password_value = request.form.get("password_value")
     if not ip_address or not username or not password_value:
         return "Missing ip_address, username, or password_value", 400
+    if password_value == "RANDOM":
+        password_value = generate_random_password()
 
     add_stored_password(ip_address, username, encrypt_data(password_value))
     return "OK", 200

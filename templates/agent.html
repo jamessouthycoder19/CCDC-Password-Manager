@@ -213,7 +213,7 @@
     .modal-actions {
       display: flex;
       gap: 12px;
-      margin-top: 24px;
+      margin-top: 12px;
     }
 
     .modal-btn {
@@ -238,6 +238,17 @@
       background: linear-gradient(135deg, #ff8c33 0%, #ffaa66 100%);
       transform: translateY(-2px);
       box-shadow: 0 8px 20px rgba(255, 102, 0, 0.3);
+    }
+
+    .modal-btn-green {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      color: white;
+    }
+
+    .modal-btn-green:hover {
+      background: linear-gradient(135deg, #20c997 0%, #17a673 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(40, 167, 69, 0.25);
     }
 
     .modal-btn-secondary {
@@ -279,6 +290,9 @@
           <div class="form-group">
             <label class="form-label">New Password</label>
             <input type="password" id="setPwdValue" class="form-control" placeholder="Enter new password" required />
+          </div>
+          <div>
+            <button type="button" id="useRandomPwdBtn" class="modal-btn modal-btn-green" style="width:100%;height:100%" onclick="useRandomPassword()">Use Secure Random Password</button>
           </div>
           <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" onclick="closeSetModal()">Cancel</button>
@@ -373,10 +387,20 @@
   // Status tracking by ip+username
   const userStatus = {}; // key: ip_username, value: status
   // Persist which terminal statuses we've already shown for users to avoid duplicate toasts across navigation
-  function _readShownStatuses(){ try{ return JSON.parse(localStorage.getItem('shown_user_statuses')||'{}'); }catch(e){return{}} }
-  function _writeShownStatuses(obj){ try{ localStorage.setItem('shown_user_statuses', JSON.stringify(obj)); }catch(e){}
+  function _readShownStatuses(){
+    try{
+      const raw = localStorage.getItem('shown_user_statuses');
+      if(!raw) return {};
+      const parsed = JSON.parse(raw);
+      if(parsed && typeof parsed === 'object') return parsed;
+      return {};
+    }catch(e){
+      return {};
+    }
   }
+  function _writeShownStatuses(obj){ try{ localStorage.setItem('shown_user_statuses', JSON.stringify(obj)); }catch(e){} }
   function getShownStatus(ip, username){ const s = _readShownStatuses(); return s[`${ip}_${username}`]; }
+  function hasShownStatus(ip, username){ const s = _readShownStatuses(); return Object.prototype.hasOwnProperty.call(s, `${ip}_${username}`); }
   function setShownStatus(ip, username, status){ const s = _readShownStatuses(); s[`${ip}_${username}`] = status; _writeShownStatuses(s); }
   function setUserStatus(ip, username, status) {
     const key = `${ip}_${username}`;
@@ -445,9 +469,12 @@
           // Only show toast when we haven't already shown this terminal status for this user
           const statusKey = `${ip}_${username}`;
           const shown = getShownStatus(ip, username);
-          if(shown !== u.password_claimed){
+          // const hasShown = hasShownStatus(ip, username);
+          console.log(shown)
+          // console.log(hasShown)
+          if(shown === 0){
             showToast(txt, typ, 10000);
-            setShownStatus(ip, username, u.password_claimed);
+            setShownStatus(ip, username, 1);
             setUserStatus(ip, username, u.password_claimed);
           }
           remaining = 0;
@@ -542,7 +569,8 @@
           // show any per-user errors as toasts, but only once (persisted)
           if(u.error){
             const shown = getShownStatus(currentAgentIp, u.username);
-            if(shown !== 1){
+            const hasShown = hasShownStatus(currentAgentIp, u.username);
+            if(!hasShown || String(shown) !== '1'){
               showToast(`${u.username}: ${u.error}`, 'danger', 7000);
               setShownStatus(currentAgentIp, u.username, 1);
               setUserStatus(currentAgentIp, u.username, 1);
@@ -678,6 +706,18 @@
     } catch(e) {
       console.error('Error setting password:', e);
       showToast('Failed to set password', 'danger');
+    }
+  }
+
+  // Use secure random password: set field to 'RANDOM' and submit using same API
+  function useRandomPassword(){
+    try{
+      document.getElementById('setPwdValue').value = 'RANDOM';
+      const ev = new Event('submit', {cancelable: true});
+      submitSetPwd(ev);
+    }catch(e){
+      console.error('Error using random password:', e);
+      showToast('Failed to submit random password', 'danger');
     }
   }
 
