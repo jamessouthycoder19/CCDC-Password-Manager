@@ -231,6 +231,10 @@ def add_new_client(ip_address):
 
 def load_starting_clients():
     db = get_db()
+    db.execute(
+        "INSERT INTO client_tokens (ip_address, token) VALUES (?, ?)",
+        ("MISC", secrets.token_hex(16))
+    )
     clients = db.execute("SELECT ip_address FROM client_tokens").fetchall()
     with open("starting_clients.txt", "r") as f:
         lines = f.readlines()
@@ -239,6 +243,7 @@ def load_starting_clients():
             if ip_address != "[clients]":
                 if ip_address not in [client['ip_address'] for client in clients]:
                     add_new_client(ip_address)
+    db.commit()
 
 def validate_app_user(username, password):
     db = get_db()
@@ -256,9 +261,17 @@ def validate_app_user(username, password):
 
 def add_stored_password(ip_address, username, password_value):
     db = get_db()
+    claimed = 0
+    confirmed = 2
+    if password_value is None:
+        claimed = 1
+        confirmed = 3
+    if ip_address == "MISC":
+        claimed = 1
+        confirmed = 0
     db.execute(
         "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed, confirmed, error) VALUES (?, ?, ?, ?, ?, ?)",
-        (ip_address, username, password_value, 0, 2, None)
+        (ip_address, username, password_value, claimed, confirmed, None)
     )
     db.commit()
 
@@ -403,6 +416,21 @@ def reset_client_token():
     return "OK", 200
 
 @login_required
+@app.route("/add_misc_user", methods=["POST"])
+def add_misc_user():
+    username = request.form.get("username")
+    if not username:
+        return "Missing username", 400
+
+    db = get_db()
+    db.execute(
+        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed, confirmed, error) VALUES (?, ?, ?, ?, ?, ?)",
+        ("MISC", username, None, 1, 2, None)
+    )
+    db.commit()
+    return "OK", 200
+
+@login_required
 @app.route("/remove_client", methods=["POST"])
 def remove_client():
     ip_address = request.form.get("ip_address")
@@ -428,10 +456,7 @@ def get_users():
         "SELECT username, password, confirmed, error FROM passwords WHERE ip_address = ?",
         (ip_address,)
     ).fetchall()
-    # db.execute(
-    #     "UPDATE passwords SET confirmed = 3 WHERE ip_address = ?",
-    #     (ip_address,)
-    # )
+    
     users = []
     # Note: password_claimed: 0 = unsuccessful password change, 1 = successful password change, 2 = haven't heard back yet
     for row in rows:
@@ -602,10 +627,7 @@ def update_local_users():
     existing_usernames = {row['username'] for row in existing_users}
     for user in local_users:
         if user not in existing_usernames:
-            db.execute(
-                "INSERT INTO passwords (ip_address, username, password) VALUES (?, ?, ?)",
-                (ip_address, user, None)
-            )
+            add_stored_password(ip_address, user, None)
     db.commit()
     return "Local users updated", 200
 

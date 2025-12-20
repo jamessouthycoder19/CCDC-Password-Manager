@@ -271,6 +271,9 @@
         <button onclick="goBack()" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:8px 12px;border-radius:6px"><i class="bi bi-arrow-left"></i></button>
         <h2 id="agentHeader">Agent</h2>
       </div>
+      <div style="display:flex;align-items:center">
+        <button id="addMiscUserBtn" class="btn-reveal" style="display:none;margin-left:8px;" onclick="openAddMiscModal()"><i class="bi bi-plus-lg"></i>&nbsp;Add User</button>
+      </div>
     </div>
 
     <div id="usersContainer"></div>
@@ -297,6 +300,30 @@
           <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" onclick="closeSetModal()">Cancel</button>
             <button type="submit" class="modal-btn modal-btn-primary">Set Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add Misc User Modal -->
+    <div class="modal-overlay" id="addMiscModal" style="display:none;">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3 class="modal-title">Add User</h3>
+          <button class="modal-close" onclick="closeAddMiscModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <form id="addMiscForm" onsubmit="submitAddMisc(event)">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" id="addMiscUsername" class="form-control" placeholder="Enter username" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service</label>
+            <input type="text" id="addMiscService" class="form-control" placeholder="e.g., Web, DB, API" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeAddMiscModal()">Cancel</button>
+            <button type="submit" class="modal-btn modal-btn-primary">Create User</button>
           </div>
         </form>
       </div>
@@ -724,8 +751,44 @@
     (function(){
     const ip = qs('ip');
     document.getElementById('agentHeader').innerText = ip? `Agent: ${ip}` : 'Agent';
+    // Show Add User button only for the special MISC agent (case-insensitive)
+    try{
+      const btn = document.getElementById('addMiscUserBtn');
+      if(btn && ip && String(ip).toUpperCase() === 'MISC') btn.style.display = '';
+    }catch(e){}
     if(ip) loadUsers(ip);
   })();
+
+  // Add Misc user modal controls
+  function openAddMiscModal(){
+    document.getElementById('addMiscUsername').value = '';
+    document.getElementById('addMiscModal').style.display = 'flex';
+    document.getElementById('addMiscUsername').focus();
+  }
+  function closeAddMiscModal(){
+    document.getElementById('addMiscModal').style.display = 'none';
+    try{ document.getElementById('addMiscForm').reset(); }catch(e){}
+  }
+
+  async function submitAddMisc(e){
+    e.preventDefault();
+    const username = document.getElementById('addMiscUsername').value.trim();
+    const service = document.getElementById('addMiscService').value.trim();
+    if(!username){ showToast('Please enter a username', 'danger'); return; }
+    if(!service){ showToast('Please enter a service', 'danger'); return; }
+    try{
+      // API no longer accepts separate 'service' field — send combined value as username
+      const combined = `${service} - ${username}`;
+      const form = new FormData();
+      form.append('username', combined);
+      const resp = await fetch('/add_misc_user', { method: 'POST', body: form });
+      if(!resp.ok){ throw new Error('Request failed'); }
+      showToast(`User ${combined} added`, 'success', 4000);
+      closeAddMiscModal();
+      // reload users for current agent
+      try{ await loadUsers(currentAgentIp); }catch(e){}
+    }catch(err){ console.error(err); showToast('Failed to add user', 'danger'); }
+  }
 
   function showCopyToast(){
     showToast('✓ Copied to clipboard', 'info', 2000);
