@@ -186,8 +186,12 @@ def init_db():
 
     row = db.execute("SELECT COUNT(*) FROM app_credentials").fetchone()
     if row[0] == 0:
-        #starting_admin_password = os.urandom(16).hex()
+        # starting_admin_password = os.urandom(16).hex()
         starting_admin_password = "admin"
+
+        with open("default_credentials.txt", "w") as f:
+            f.write(f"admin:{starting_admin_password}\n")
+
         encryption_key_salt = os.urandom(16).hex()
         print("Starting Username: admin")
         print(f"Starting Password: {starting_admin_password}")
