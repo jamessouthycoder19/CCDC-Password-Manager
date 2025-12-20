@@ -215,6 +215,31 @@ def add_app_user(username, password, encryption_key_salt):
     )
     db.commit()
 
+def add_new_client(ip_address):
+    db = get_db()
+    row = db.execute(
+        "SELECT ip_address FROM client_tokens WHERE ip_address = ?",
+        (ip_address,)
+    ).fetchone()
+    if row:
+        return "Client already exists", 400
+    db.execute(
+        "INSERT OR REPLACE INTO client_tokens (ip_address, token) VALUES (?, ?)",
+        (ip_address, None)
+    )
+    db.commit()
+
+def load_starting_clients():
+    db = get_db()
+    clients = db.execute("SELECT ip_address FROM client_tokens").fetchall()
+    with open("starting_clients.txt", "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            ip_address = line.strip()
+            if ip_address != "[clients]":
+                if ip_address not in [client['ip_address'] for client in clients]:
+                    add_new_client(ip_address)
+
 def validate_app_user(username, password):
     db = get_db()
     row = db.execute(
@@ -333,18 +358,8 @@ def add_client():
     ip_address = request.form.get("ip_address")
     if not ip_address:
         return "Missing ip_address", 400
-    db = get_db()
-    row = db.execute(
-        "SELECT ip_address FROM client_tokens WHERE ip_address = ?",
-        (ip_address,)
-    ).fetchone()
-    if row:
-        return "Client already exists", 400
-    db.execute(
-        "INSERT OR REPLACE INTO client_tokens (ip_address, token) VALUES (?, ?)",
-        (ip_address, None)
-    )
-    db.commit()
+    
+    add_new_client(ip_address)
 
     return "OK", 200
 
@@ -625,6 +640,7 @@ if __name__ == '__main__':
     with app.app_context():
         clear_db()
         init_db()
+        load_starting_clients()
 
     key_management_thread = threading.Thread(
         target=validate_encryption_key_state,
