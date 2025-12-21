@@ -40,7 +40,7 @@ NUMBER_RANDOM_WORDS = len(RANDOM_WORD_LIST)
 RANDOM_INTEGER_LIST = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 NUMBER_RANDOM_INTEGERS = len(RANDOM_INTEGER_LIST)
 
-RANDOM_SPECIAL_CHAR_LIST = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '=', '+']
+RANDOM_SPECIAL_CHAR_LIST = ['!', '@', '#', '$', '%', '^', '*', '(', ')', '-', '_', '=', '+']
 NUMBER_RANDOM_SPECIAL_CHARS = len(RANDOM_SPECIAL_CHAR_LIST)
 
 ######################### Setup Flask Config #########################
@@ -477,6 +477,11 @@ def set_user_password():
     password_value = request.form.get("password_value")
     if not ip_address or not username or not password_value:
         return "Missing ip_address, username, or password_value", 400
+
+    for bad_symbol in [';', '--', '"', "'", "&", "|"]:
+        if bad_symbol in password_value:
+            return "Invalid characters in password_value", 400
+    
     if password_value == "RANDOM":
         password_value = generate_random_password()
 

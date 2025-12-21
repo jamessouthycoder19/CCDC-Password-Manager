@@ -722,7 +722,7 @@
       const resp = await fetch('/set_user_password', { method: 'POST', body: formData });
       if (!resp.ok) {
         setUserStatus(currentAgentIp, username, null);
-        showToast('Failed to set password', 'danger');
+        showToast('Failed to set password: ' + await resp.text(), 'danger');
         return;
       }
       closeSetModal();
