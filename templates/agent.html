@@ -546,7 +546,73 @@
 
   // Attach event listeners once to the users container using event delegation
   const container = document.getElementById('usersContainer');
+  let isDragging = false;
+  function sanitizeName(n){ return String(n).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+  function loadUserOrder(ip){
+    try{ return JSON.parse(localStorage.getItem('user_order::' + ip) || '[]'); }catch(e){ return []; }
+  }
+
+  function saveUserOrderFromDOM(ip){
+    const container = document.getElementById('usersContainer');
+    const order = Array.from(container.querySelectorAll('.user-row')).map(el=>el.dataset.username);
+    try{ localStorage.setItem('user_order::' + ip, JSON.stringify(order)); }catch(e){}
+  }
+
+  function applyStoredUserOrder(freshUsers, ip){
+    const stored = loadUserOrder(ip);
+    const current = freshUsers.map(u=>u.username);
+    const newOnes = current.filter(u => stored.indexOf(u)===-1);
+    const ordered = [...newOnes, ...stored.filter(u => current.indexOf(u)!==-1 && newOnes.indexOf(u)===-1)];
+    ordered.push(...current.filter(u=> ordered.indexOf(u)===-1));
+    const orderedUsers = ordered.map(username => freshUsers.find(u=>u.username===username)).filter(Boolean);
+    try{ localStorage.setItem('user_order::' + ip, JSON.stringify(orderedUsers.map(u=>u.username))); }catch(e){}
+    return orderedUsers;
+  }
+
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.user-row:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  function attachUserDragHandlers(ip){
+    const container = document.getElementById('usersContainer');
+    const rows = container.querySelectorAll('.user-row');
+    rows.forEach(row => {
+      row.setAttribute('draggable', 'true');
+      row.ondragstart = function(e){
+        isDragging = true;
+        this.classList.add('dragging');
+        try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.username); }catch(e){}
+      };
+      row.ondragend = function(){
+        isDragging = false;
+        this.classList.remove('dragging');
+        saveUserOrderFromDOM(ip);
+      };
+    });
+
+    container.ondragover = function(e){
+      e.preventDefault();
+      const after = getDragAfterElement(container, e.clientY);
+      const dragging = document.querySelector('.user-row.dragging');
+      if(!dragging) return;
+      if(after == null) container.appendChild(dragging);
+      else container.insertBefore(dragging, after);
+    };
+    container.ondrop = function(e){ e.preventDefault(); saveUserOrderFromDOM(ip); };
+  }
+
   container.addEventListener('click', (e) => {
+    if(isDragging) return;
     if(e.target.classList.contains('btn-reveal')) {
       e.preventDefault();
       e.stopPropagation();
@@ -607,7 +673,10 @@
         }catch(e){}
       });
 
-      container.innerHTML = users.map(u => {
+      // Apply stored order for this agent (new users first)
+      const ordered = applyStoredUserOrder(users, currentAgentIp);
+
+      container.innerHTML = ordered.map(u => {
         const id = sanitizeName(u.username);
         const revealBtn = u.password_exists ? `<button class="btn-reveal btn-reveal-${id}" type="button" data-action="reveal" data-username-reveal="${u.username}">Reveal</button>` : '';
         return `
@@ -624,6 +693,9 @@
           </div>
         </div>
       `}).join('');
+
+      // Attach drag/drop handlers so users can be reordered
+      attachUserDragHandlers(currentAgentIp);
 
       // Set status badges after rendering
       users.forEach(u => {

@@ -522,23 +522,6 @@
       <div class="empty-state-text">No agents registered</div>
       <div class="empty-state-desc">Click "Add Agent" to register a new agent</div>
     </div>
-    
-    <!-- Agent Detail View (hidden until a card is clicked) -->
-    <div id="agentDetailView" style="display:none;margin-top:24px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;">
-        <div>
-          <button class="add-agent-btn" onclick="closeAgentDetail()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.06);text-transform:none;padding:8px 12px;">
-            <i class="bi bi-arrow-left"></i> Back
-          </button>
-        </div>
-        <div style="flex:1;text-align:center;">
-          <h2 id="detailHeader" style="margin:0;color:#ff6600;"></h2>
-        </div>
-        <div style="width:120px"></div>
-      </div>
-
-      <div id="usersList" style="display:flex;flex-direction:column;gap:12px;"></div>
-    </div>
   </div>
 
   <!-- Add Agent Modal -->
@@ -602,6 +585,82 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let agents = [];
+    let isDragging = false;
+
+    function sanitizeId(ip){ return String(ip).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+    function loadStoredOrder(){
+      try{ return JSON.parse(localStorage.getItem('agent_order')||'[]'); }catch(e){ return []; }
+    }
+
+    function saveOrderFromDOM(){
+      const grid = document.getElementById('agentsGrid');
+      const order = Array.from(grid.querySelectorAll('.agent-card')).map(el=>el.dataset.ip);
+      try{ localStorage.setItem('agent_order', JSON.stringify(order)); }catch(e){}
+    }
+
+    function applyStoredOrder(freshAgents){
+      const stored = loadStoredOrder();
+      const currentIps = freshAgents.map(a=>a.ip_address);
+      const newIps = currentIps.filter(ip => stored.indexOf(ip)===-1);
+      const orderedIps = [...newIps, ...stored.filter(ip => currentIps.indexOf(ip)!==-1 && newIps.indexOf(ip)===-1)];
+      // fallback: include any remaining ips
+      orderedIps.push(...currentIps.filter(ip => orderedIps.indexOf(ip)===-1));
+      const orderedAgents = orderedIps.map(ip => freshAgents.find(a=>a.ip_address===ip)).filter(Boolean);
+      // update stored order to reflect only current agents (keep new-first ordering)
+      try{ localStorage.setItem('agent_order', JSON.stringify(orderedAgents.map(a=>a.ip_address))); }catch(e){}
+      return orderedAgents;
+    }
+
+    function attachDragHandlers(){
+      const grid = document.getElementById('agentsGrid');
+      const cards = grid.querySelectorAll('.agent-card');
+      cards.forEach(card => {
+        card.setAttribute('draggable', 'true');
+        card.ondragstart = function(e){
+          isDragging = true;
+          this.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', this.dataset.ip);
+          try{ e.dataTransfer.effectAllowed = 'move'; }catch(e){}
+        };
+        card.ondragend = function(){
+          isDragging = false;
+          this.classList.remove('dragging');
+          saveOrderFromDOM();
+        };
+      });
+
+      grid.ondragover = function(e){
+        e.preventDefault();
+        const afterElement = getDragAfterElement(grid, e.clientY);
+        const dragging = document.querySelector('.dragging');
+        if(!dragging) return;
+        if(afterElement == null) grid.appendChild(dragging);
+        else grid.insertBefore(dragging, afterElement);
+      };
+
+      grid.ondrop = function(e){
+        e.preventDefault();
+        // ensure order saved after drop
+        saveOrderFromDOM();
+      };
+    }
+
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('.agent-card:not(.dragging)')];
+
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    function handleAgentClick(ip){ if(isDragging) return; window.location.href = '/agent?ip=' + encodeURIComponent(ip); }
 
     // Toast notification container
     (function(){
@@ -775,7 +834,9 @@
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        agents = data.clients || [];
+        const fresh = data.clients || [];
+        // Apply stored order; new agents are placed first
+        agents = applyStoredOrder(fresh);
         renderAgents();
       } catch (err) {
         console.error('Error fetching agents:', err);
@@ -795,23 +856,24 @@
       grid.style.display = 'grid';
       emptyState.style.display = 'none';
 
-      grid.innerHTML = agents.map((agent, index) => {
+      grid.innerHTML = agents.map((agent) => {
         // Build extra info rows dynamically from additional fields
         let extraHtml = '';
         for (const [k, v] of Object.entries(agent)) {
           if (k === 'ip_address' || k === 'status') continue;
           extraHtml += `<div class="status-item"><span class="status-label">${k.replace(/_/g,' ')}:</span><span class="status-value">${v===null||v===undefined? 'N/A' : v}</span></div>`;
         }
+        const id = sanitizeId(agent.ip_address);
 
         return `
-        <div class="agent-card" onclick="window.location.href='/agent?ip=' + encodeURIComponent('${agent.ip_address}')">
+        <div class="agent-card" data-ip="${agent.ip_address}" onclick="handleAgentClick('${agent.ip_address}')">
           <div class="card-header-row">
             <div class="card-title">${agent.ip_address}</div>
             <div class="card-menu" onclick="event.stopPropagation()">
-              <button class="menu-btn" onclick="toggleMenu(${index}, event)">
+              <button class="menu-btn" onclick="toggleMenu('${id}', event)">
                 <i class="bi bi-three-dots-vertical"></i>
               </button>
-              <div class="dropdown-menu" id="menu-${index}">
+              <div class="dropdown-menu" id="menu-${id}">
                 <button class="dropdown-item" onclick="resetToken('${agent.ip_address}')">
                   <i class="bi bi-arrow-clockwise"></i>
                   Reset Token
@@ -832,16 +894,20 @@
           </div>
         </div>`;
       }).join('');
+
+      // Attach drag handlers after DOM updated
+      attachDragHandlers();
     }
 
-    function toggleMenu(index) {
-      const menu = document.getElementById(`menu-${index}`);
+    function toggleMenu(id, event) {
+      const menu = document.getElementById('menu-' + id);
       // Close all other menus
-      document.querySelectorAll('.dropdown-menu').forEach((m, i) => {
-        if (i !== index) m.classList.remove('show');
+      document.querySelectorAll('.dropdown-menu').forEach((m) => {
+        if (m !== menu) m.classList.remove('show');
       });
+      if(!menu) return;
       menu.classList.toggle('show');
-      
+
       // Close menu when clicking outside
       document.addEventListener('click', function closeMenu(e) {
         if (!e.target.closest('.card-menu')) {
