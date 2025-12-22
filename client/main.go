@@ -80,6 +80,97 @@ func difference(a, b []string) []string {
     return diff
 }
 
+func getLocalIP() string {
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("hostname", "-I")
+		output, _ := cmd.Output()
+		return strings.Split(string(output), " ")[0]
+	} else {
+		cmd := exec.Command("powershell.exe", "-c", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like \"*Ethernet*\" }).IPAddress")
+		output, _ := cmd.Output()
+		return strings.TrimSpace(string(output))
+	}
+}
+
+func getIsDC() bool {
+	if runtime.GOOS != "windows" {
+		return false
+	} else {
+		cmd := exec.Command("powershell.exe", "-c", "Get-WmiObject -Query 'select * from Win32_OperatingSystem where (ProductType = \"2\")'")
+		output, _ := cmd.Output()
+		fmt.Println(len(output))
+		if len(output) != 0 {
+			return true
+		}
+		return false
+	}
+}
+
+func getToken() string {
+	local_ip := getLocalIP()
+	server_ip_address := getServerIPAddress()
+	token := ""
+	
+	if runtime.GOOS == "windows" {
+		tokenBytes, err := os.ReadFile("C:\\Program Files\\CCDC-Password-Manager\\token.txt")
+		if err != nil {
+			fmt.Println("Error reading token.txt:", err)
+		}
+		token = strings.TrimSpace(string(tokenBytes))
+	} else {
+		tokenBytes, err := os.ReadFile("/etc/ccdc-password-manager/token.txt")
+		if err != nil {
+			fmt.Println("Error reading token.txt:", err)
+		}
+		token = strings.TrimSpace(string(tokenBytes))
+	}
+	if token != "" {
+		return token
+	}
+
+	form := url.Values{}
+	form.Add("ip_address", local_ip)
+
+	resp, _ := http.PostForm("https://" + server_ip_address + "/register_client",form)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	token = string(body)
+
+	if runtime.GOOS == "windows" {
+		err := os.WriteFile("C:\\Program Files\\CCDC-Password-Manager\\token.txt", []byte(token), 0600)
+		if err != nil {
+			fmt.Println("Error writing token.txt:", err)
+		}
+	} else {
+		err := os.WriteFile("/etc/ccdc-password-manager/token.txt", []byte(token), 0600)
+		if err != nil {
+			fmt.Println("Error writing token.txt:", err)
+		}
+	}
+	
+	return token
+}
+
+func getServerIPAddress() string {
+	if runtime.GOOS == "windows" {
+		serverIPBytes, err := os.ReadFile("C:\\Program Files\\CCDC-Password-Manager\\server_ip_address.txt")
+		if err != nil {
+			fmt.Println("Error Loading Server IP Address:", err)
+		}
+		server_ip := strings.TrimSpace(string(serverIPBytes))
+		
+		return server_ip
+	} else {
+		serverIPBytes, err := os.ReadFile("/etc/ccdc-password-manager/server_ip_address.txt")
+		if err != nil {
+			fmt.Println("Error Loading Server IP Address:", err)
+		}
+		server_ip := strings.TrimSpace(string(serverIPBytes))
+		
+		return server_ip
+	}
+}
+
 
 // func (p *program) run() {
 // 	// put main code here when turning it into a service
@@ -101,42 +192,22 @@ func main() {
 	// s.Run()
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	
-	is_dc := false
-	local_ip := "1.1.1.1"
-	if runtime.GOOS == "linux" {
-		cmd := exec.Command("hostname", "-I")
-		output, _ := cmd.Output()
-		local_ip = strings.Split(string(output), " ")[0]
-	} else {
-		cmd := exec.Command("powershell.exe", "-c", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like \"*Ethernet*\" }).IPAddress")
-		output, _ := cmd.Output()
-		local_ip = strings.TrimSpace(string(output))
-		cmd = exec.Command("powershell.exe", "-c", "Get-WmiObject -Query 'select * from Win32_OperatingSystem where (ProductType = \"2\")'")
-		output, _ = cmd.Output()
-		fmt.Println(len(output))
-		if len(output) != 0 {
-			is_dc = true
-		}
-	}
+	is_dc := getIsDC()
+	local_ip := getLocalIP()
 
-	server_ip_address := "192.168.229.130"
-	form := url.Values{}
-	form.Add("ip_address", local_ip)
+	server_ip_address := getServerIPAddress()
 
-	resp, _ := http.PostForm("https://" + server_ip_address + "/register_client",form)
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	token := string(body)
+	token := getToken()
 
 	local_users := getLocalUsers()
 	i := 0
 
-	form = url.Values{}
+	form := url.Values{}
 	form.Add("ip_address", local_ip)
 	form.Add("local_users", strings.Join(local_users, ","))
 	form.Add("authoriztion_token", token)
 
-	resp, _ = http.PostForm("https://" + server_ip_address + "/update_local_users",form)
+	resp, _ := http.PostForm("https://" + server_ip_address + "/update_local_users",form)
 
 	for {
 		i += 1
