@@ -180,6 +180,7 @@ def init_db():
                      
     CREATE TABLE IF NOT EXISTS client_tokens (
         ip_address  TEXT PRIMARY KEY,
+        hostname    TEXT,
         token       TEXT
     );
     """)
@@ -224,16 +225,16 @@ def add_new_client(ip_address):
     if row:
         return "Client already exists", 400
     db.execute(
-        "INSERT OR REPLACE INTO client_tokens (ip_address, token) VALUES (?, ?)",
-        (ip_address, None)
+        "INSERT OR REPLACE INTO client_tokens (ip_address, hostname, token) VALUES (?, ?, ?)",
+        (ip_address, None, None)
     )
     db.commit()
 
 def load_starting_clients():
     db = get_db()
     db.execute(
-        "INSERT INTO client_tokens (ip_address, token) VALUES (?, ?)",
-        ("MISC", secrets.token_hex(16))
+        "INSERT INTO client_tokens (ip_address, hostname, token) VALUES (?, ?, ?)",
+        ("MISC", None, secrets.token_hex(16))
     )
     clients = db.execute("SELECT ip_address FROM client_tokens").fetchall()
     with open("starting_clients.txt", "r") as f:
@@ -380,7 +381,7 @@ def add_client():
 @app.route("/get_clients", methods=["GET"])
 def get_clients():
     db = get_db()
-    rows = db.execute("SELECT ip_address, token FROM client_tokens").fetchall()
+    rows = db.execute("SELECT ip_address, hostname, token FROM client_tokens").fetchall()
     clients = []
     for row in rows:
         status = "Connected" if row['token'] else "Unregistered"
@@ -394,6 +395,7 @@ def get_clients():
         ).fetchone()
         clients.append({
             'ip_address': row['ip_address'],
+            'hostname': row['hostname'],
             'status': status,
             'total_users': users['user_count'],
             'users_with_passwords': users_with_passwords['user_count'],
@@ -653,9 +655,10 @@ def register_client():
         else:
             # Generate token
             token = os.urandom(16).hex()
+            hostname = request.form.get("hostname")
             db.execute(
-                "UPDATE client_tokens SET token = ? WHERE ip_address = ?",
-                (token, ip_address)
+                "UPDATE client_tokens SET token = ?, hostname = ? WHERE ip_address = ?",
+                (token, hostname, ip_address)
             )
             db.commit()
             return token, 200

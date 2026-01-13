@@ -92,6 +92,18 @@ func getLocalIP() string {
 	}
 }
 
+func getHostname() string {
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("hostname")
+		output, _ := cmd.Output()
+		return strings.TrimSpace(string(output))
+	} else {
+		cmd := exec.Command("powershell.exe", "-c", "hostname")
+		output, _ := cmd.Output()
+		return strings.TrimSpace(string(output))
+	}
+}
+
 func getIsDC() bool {
 	if runtime.GOOS != "windows" {
 		return false
@@ -128,8 +140,11 @@ func getToken() string {
 		return token
 	}
 
+	hostname := getHostname()
+
 	form := url.Values{}
 	form.Add("ip_address", local_ip)
+	form.Add("hostname", hostname)
 
 	resp, _ := http.PostForm("https://" + server_ip_address + "/register_client",form)
 	defer resp.Body.Close()
