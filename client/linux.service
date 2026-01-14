@@ -1,0 +1,13 @@
+[Unit]
+Description=Initialize Systemctl
+After=network.target
+
+[Service]
+ExecStart=/opt/ccdc-password-manager-client/client
+Type=exec
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target
