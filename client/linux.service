@@ -1,5 +1,5 @@
 [Unit]
-Description=Initialize Systemctl
+Description=CCDC Password Manager
 After=network.target
 
 [Service]

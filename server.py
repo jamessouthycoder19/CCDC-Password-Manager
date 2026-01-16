@@ -172,6 +172,8 @@ def init_db():
         ip_address  TEXT NOT NULL,
         username    TEXT NOT NULL,
         password    TEXT,
+        enabled     INTEGER DEFAULT 1,
+        admin       INTEGER DEFAULT 0,
         claimed     INTEGER DEFAULT 1,
         confirmed   INTEGER DEFAULT 3,
         error       TEXT,
@@ -270,9 +272,21 @@ def add_stored_password(ip_address, username, password_value):
     if ip_address == "MISC":
         claimed = 1
         confirmed = 0
+
+    output = db.execute(
+        "SELECT admin, enabled FROM passwords WHERE ip_address = ? AND username = ?",
+        (ip_address, username)
+    )
+    row = output.fetchone()
+    if row:
+        admin = row['admin']
+        enabled = row['enabled']
+    else:
+        admin = 0
+        enabled = 1
     db.execute(
-        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed, confirmed, error) VALUES (?, ?, ?, ?, ?, ?)",
-        (ip_address, username, password_value, claimed, confirmed, None)
+        "INSERT OR REPLACE INTO passwords (ip_address, username, password, claimed, confirmed, admin, enabled, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (ip_address, username, password_value, claimed, confirmed, admin, enabled, None)
     )
     db.commit()
 
@@ -378,6 +392,20 @@ def add_client():
     return "OK", 200
 
 @login_required
+@app.route("/add_user", methods=["POST"])
+def add_user():
+    ip_address = request.form.get("ip_address")
+    username = request.form.get("username")
+    if not ip_address or not username:
+        return "Missing ip_address or username", 400
+    
+    password_value = generate_random_password()
+    encrypted_password = encrypt_data(password_value)
+
+    add_stored_password(ip_address, username, encrypted_password)
+    return "OK", 200
+
+@login_required
 @app.route("/get_clients", methods=["GET"])
 def get_clients():
     db = get_db()
@@ -455,7 +483,7 @@ def get_users():
         return "Missing ip_address", 400
     db = get_db()
     rows = db.execute(
-        "SELECT username, password, confirmed, error FROM passwords WHERE ip_address = ?",
+        "SELECT username, password, confirmed, error, enabled, admin FROM passwords WHERE ip_address = ?",
         (ip_address,)
     ).fetchall()
     
@@ -466,6 +494,8 @@ def get_users():
             'username': row['username'],
             'password_exists': row['password'] is not None,
             'password_claimed': row['confirmed'],
+            'enabled': row['enabled'],
+            'admin': row['admin'],
             'error': row['error'],
         })
     # db.commit()
@@ -488,6 +518,46 @@ def set_user_password():
         password_value = generate_random_password()
 
     add_stored_password(ip_address, username, encrypt_data(password_value))
+    return "OK", 200
+
+@login_required
+@app.route("/set_user_enabled", methods=["POST"])
+def set_user_enabled():
+    ip_address = request.form.get("ip_address")
+    username = request.form.get("username")
+    enabled = request.form.get("enabled")
+    if not ip_address or not username or enabled is None:
+        return "Missing ip_address, username, or enabled", 400
+
+    enabled_value = 1 if enabled.lower() == "true" else 0
+
+    db = get_db()
+    db.execute(
+        "UPDATE passwords SET enabled = ?, claimed = ?, confirmed = ? WHERE ip_address = ? AND username = ?",
+        (enabled_value, 0, 2, ip_address, username)
+    )
+    db.commit()
+
+    return "OK", 200
+
+@login_required
+@app.route("/set_user_admin", methods=["POST"])
+def set_user_admin():
+    ip_address = request.form.get("ip_address")
+    username = request.form.get("username")
+    admin = request.form.get("admin")
+    if not ip_address or not username or admin is None:
+        return "Missing ip_address, username, or admin", 400
+
+    admin_value = 1 if admin.lower() == "true" else 0
+
+    db = get_db()
+    db.execute(
+        "UPDATE passwords SET admin = ?, claimed = ?, confirmed = ? WHERE ip_address = ? AND username = ?",
+        (admin_value, 0, 2, ip_address, username)
+    )
+    db.commit()
+
     return "OK", 200
 
 @login_required
@@ -557,14 +627,30 @@ def get_passwords_to_claim():
     if not ip_address:
         return "Missing ip_address", 400
     rows = db.execute(
-        "SELECT username, password FROM passwords WHERE ip_address = ? AND claimed = 0",
+        "SELECT username, password, admin, enabled FROM passwords WHERE ip_address = ? AND claimed = 0",
         (ip_address,)
     ).fetchall()
     users = []
     for row in rows:
+        new_password = ""
+        if row['password'] is not None:
+            new_password = decrypt_data(row['password'])
+        else:
+            new_password = "None"
+        
+        admin_ret = False
+        if row['admin'] == 1:
+            admin_ret = True
+
+        enabled_ret = False
+        if row['enabled'] == 1:
+            enabled_ret = True
+
         users.append({
             'username': row['username'],
-            'password': decrypt_data(row['password']),
+            'password': new_password,
+            'admin': admin_ret,
+            'enabled': enabled_ret,
         })
         db.execute(
             "UPDATE passwords SET claimed = 1 WHERE ip_address = ? AND username = ?",
@@ -611,7 +697,7 @@ def update_password_change_status():
 @app.route("/update_local_users", methods=["POST"])
 def update_local_users():
     ip_address = request.form.get("ip_address")
-    local_users = request.form.getlist("local_users")
+    local_users = request.form.get("local_users")
     token = request.form.get("authoriztion_token")
     # Check auth
     if not token:
@@ -625,7 +711,7 @@ def update_local_users():
         return "Unauthorized", 401
     if not ip_address or not local_users:
         return "Missing ip_address or local_users", 400
-    local_users = local_users[0].split(',')
+    local_users = json.loads(local_users)
     # Update local users
     existing_users = db.execute(
         "SELECT username FROM passwords WHERE ip_address = ?",
@@ -633,8 +719,11 @@ def update_local_users():
     ).fetchall()
     existing_usernames = {row['username'] for row in existing_users}
     for user in local_users:
-        if user not in existing_usernames:
-            add_stored_password(ip_address, user, None)
+        if user["user"] not in existing_usernames:
+            db.execute(
+                "INSERT OR REPLACE INTO passwords (ip_address, username, enabled, admin, password) VALUES (?, ?, ?, ?, ?)",
+                (ip_address, user["user"], int(user["enabled"]), int(user["admin"]), None)
+            )
     db.commit()
     return "Local users updated", 200
 

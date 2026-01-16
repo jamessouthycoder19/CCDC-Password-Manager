@@ -9,10 +9,15 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
   <style>
     body{background:linear-gradient(135deg,#000,#111);color:#fff;font-family:Segoe UI,Arial;padding:24px}
-    .container{max-width:900px;margin:0 auto}
+    .container{max-width:1200px;margin:0 auto}
     .header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
     .header h2{color:#ff6600;margin:0}
     .user-row{background:rgba(255,255,255,0.03);padding:14px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .user-row{margin-bottom:10px}
+    .user-col{display:flex;align-items:center}
+    .user-col-name{flex:3;min-width:340px}
+    .user-col-pw{flex:2;min-width:300px}
+    .badges{display:inline-flex;gap:12px;margin-left:10px;align-items:center}
     .label{color:#ccc;font-size:13px}
     .value{color:#fff;font-weight:600}
     /* Reveal button: like Add Agent */
@@ -69,7 +74,7 @@
       transform: translateY(0);
     }
     .empty{color:#999;padding:40px;text-align:center}
-    .password-box{background:rgba(255,102,0,0.15);border:2px solid #ff6600;padding:12px 16px;border-radius:8px;font-size:16px;font-weight:700;color:#fff;font-family:monospace;cursor:pointer;user-select:none;min-width:120px;display:none}
+    .password-box{background:rgba(255,102,0,0.15);border:2px solid #ff6600;padding:12px 16px;border-radius:8px;font-size:16px;font-weight:700;color:#fff;font-family:monospace;cursor:pointer;user-select:none;min-width:260px;display:none}
     .password-box:hover{background:rgba(255,102,0,0.25)}
     #toastContainer {
       position: fixed;
@@ -99,16 +104,146 @@
     @keyframes fadein { from { opacity: 0; } to { opacity: 0.95; } }
     .pw-status-badge {
       display: inline-block;
-      margin-left: 8px;
-      padding: 2px 10px;
+      padding: 4px 12px;
       border-radius: 12px;
       font-size: 0.95em;
       vertical-align: middle;
       color: #fff;
+      font-weight: 700;
     }
     .pw-status-badge-success { background: #28a745; }
     .pw-status-badge-failed { background: #dc3545; }
     .pw-status-badge-pending { background: #ffc107; color: #333; }
+
+    /* Account status badge */
+    .account-status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.95em;
+      vertical-align: middle;
+      color: #fff;
+      font-weight: 700;
+    }
+    .account-status-enabled { background: #28a745; }
+    .account-status-disabled { background: #6c757d; }
+
+    /* Enable/Disable button */
+    .btn-toggle {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+    }
+    .btn-toggle-enable {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+    .btn-toggle-enable:hover {
+      background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+      color: white;
+    }
+    .btn-toggle-disable {
+      background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    }
+    .btn-toggle-disable:hover {
+      background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(108, 117, 125, 0.3);
+      color: white;
+    }
+    .btn-toggle:active {
+      transform: translateY(0);
+    }
+    .btn-more {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .more-menu {
+      display: none;
+      position: absolute;
+      background: rgba(20,20,20,0.98);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 160px;
+    }
+    .more-menu button { width:100%; text-align:left }
+
+    /* Dashboard-style three-dots menu */
+    .card-menu { position: relative; }
+    .menu-btn {
+      background: transparent;
+      border: none;
+      color: #ccc;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+    .menu-btn:hover { background: rgba(255,102,0,0.2); color: #ff6600; }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: rgba(30, 30, 30, 0.98);
+      border: 1px solid rgba(255, 102, 0, 0.3);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+      display: none;
+      min-width: 150px;
+      z-index: 1000;
+      overflow: hidden;
+    }
+    .dropdown-menu.show { display: block; }
+    .dropdown-item {
+      padding: 12px 16px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .dropdown-item:hover { background: rgba(255,102,0,0.2); color: #ff6600; }
+    .dropdown-item.green { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: #fff; }
+    .dropdown-item.green:hover { filter: brightness(0.95); }
+    .dropdown-item.danger { background: linear-gradient(135deg, #dc3545 0%, #e5535a 100%); color: #fff; }
+    .dropdown-item.danger:hover { filter: brightness(0.95); }
 
     /* Modal Styles (copied from dashboard Add Agent modal to match exactly) */
     .modal-overlay {
@@ -273,6 +408,7 @@
         <h2 id="agentHeader">Agent</h2>
       </div>
       <div style="display:flex;align-items:center">
+        <button id="addUserBtn" class="btn-reveal" style="margin-left:8px;" onclick="openAddUserModal()"><i class="bi bi-plus-lg"></i>&nbsp;Add User</button>
         <button id="addMiscUserBtn" class="btn-reveal" style="display:none;margin-left:8px;" onclick="openAddMiscModal()"><i class="bi bi-plus-lg"></i>&nbsp;Add User</button>
       </div>
     </div>
@@ -301,6 +437,26 @@
           <div class="modal-actions">
             <button type="button" class="modal-btn modal-btn-secondary" onclick="closeSetModal()">Cancel</button>
             <button type="submit" class="modal-btn modal-btn-primary">Set Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal" style="display:none;">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3 class="modal-title">Add User</h3>
+          <button class="modal-close" onclick="closeAddUserModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <form id="addUserForm" onsubmit="submitAddUser(event)">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" id="addUserUsername" class="form-control" placeholder="Enter username" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
+            <button type="submit" class="modal-btn modal-btn-primary">Add User</button>
           </div>
         </form>
       </div>
@@ -460,7 +616,15 @@
       badge.className = "pw-status-badge pw-status-badge-failed";
       badge.innerText = "Failed";
     }
-    userRow.querySelector('.value').appendChild(badge);
+    // Insert into the dedicated badges container so spacing (gap) is consistent
+    const valueEl = userRow.querySelector('.value');
+    if (!valueEl) return;
+    const badgesContainer = valueEl.querySelector('.badges');
+    if (badgesContainer) {
+      badgesContainer.appendChild(badge);
+    } else {
+      valueEl.appendChild(badge);
+    }
   }
 
   // Polling for password change status (persists via localStorage so it continues across pages)
@@ -470,7 +634,7 @@
     const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]');
     const exists = stored.find(s => s.ip===ip && s.username===username);
     if(!exists){
-      stored.push({ip, username, attempts});
+      stored.push({ip, username, attempts, intervalMs});
       localStorage.setItem('pending_pw_polls', JSON.stringify(stored));
     }
     if(!ACTIVE_POLLS[key]) startPollWorker(ip, username, attempts, intervalMs);
@@ -497,9 +661,6 @@
           // Only show toast when we haven't already shown this terminal status for this user
           const statusKey = `${ip}_${username}`;
           const shown = getShownStatus(ip, username);
-          // const hasShown = hasShownStatus(ip, username);
-          console.log(shown)
-          // console.log(hasShown)
           if(shown === 0){
             showToast(txt, typ, 10000);
             setShownStatus(ip, username, 1);
@@ -533,7 +694,75 @@
   (function resumePolls(){
     try{
       const stored = JSON.parse(localStorage.getItem('pending_pw_polls')||'[]');
-      (stored||[]).forEach(s=> startPollWorker(s.ip,s.username,s.attempts||5,10000));
+      (stored||[]).forEach(s=> startPollWorker(s.ip, s.username, s.attempts||5, s.intervalMs||10000));
+    }catch(e){}
+  })();
+
+  // Polling for newly created users (checks /get_users until the username appears)
+  const ACTIVE_CREATE_POLLS = {};
+  function enqueueCreateUserPoll(ip, username, attempts=6, intervalMs=3000){
+    const key = `${ip}||${username}`;
+    const stored = JSON.parse(localStorage.getItem('pending_user_creation_polls')||'[]');
+    const exists = stored.find(s => s.ip===ip && s.username===username);
+    if(!exists){
+      stored.push({ip, username, attempts, intervalMs});
+      localStorage.setItem('pending_user_creation_polls', JSON.stringify(stored));
+    }
+    if(!ACTIVE_CREATE_POLLS[key]) startCreateUserWorker(ip, username, attempts, intervalMs);
+  }
+
+  function startCreateUserWorker(ip, username, attempts=6, intervalMs=3000){
+    const key = `${ip}||${username}`;
+    if(ACTIVE_CREATE_POLLS[key]) return;
+    let remaining = attempts;
+    const doCheck = async ()=>{
+      try{
+        const resp = await fetch(`/get_users?ip_address=${encodeURIComponent(ip)}`, {headers:{'Accept':'application/json'}});
+        if(!resp.ok) throw new Error('fetch failed');
+        const data = await resp.json();
+        const users = data.users||[];
+        const found = users.find(x=>x.username===username);
+        if(found){
+          showToast(`${username}: created`, 'success', 5000);
+          // mark as shown so we don't duplicate toasts
+          try{ setShownStatus(ip, username, 1); }catch(e){}
+          // refresh UI to include new user
+          if(currentAgentIp===ip) try{ await loadUsers(ip); }catch(e){}
+          remaining = 0; clearAndCleanup(); return;
+        }
+        remaining--;
+        if(remaining<=0){
+          showToast(`${username}: creation not detected`, 'danger', 6000);
+          try{ setShownStatus(ip, username, 1); }catch(e){}
+          clearAndCleanup();
+        }
+      }catch(e){
+        remaining--;
+        if(remaining<=0){
+          showToast(`${username}: creation check failed`, 'danger', 6000);
+          try{ setShownStatus(ip, username, 1); }catch(e){}
+          clearAndCleanup();
+        }
+      }
+    };
+    const timer = setInterval(doCheck, intervalMs);
+    ACTIVE_CREATE_POLLS[key] = {timer};
+    // run immediately once
+    doCheck();
+
+    function clearAndCleanup(){
+      clearInterval(timer);
+      delete ACTIVE_CREATE_POLLS[key];
+      const stored = JSON.parse(localStorage.getItem('pending_user_creation_polls')||'[]').filter(s=>!(s.ip===ip && s.username===username));
+      localStorage.setItem('pending_user_creation_polls', JSON.stringify(stored));
+    }
+  }
+
+  // Resume any pending create-user polls on load
+  (function resumeCreatePolls(){
+    try{
+      const stored = JSON.parse(localStorage.getItem('pending_user_creation_polls')||'[]');
+      (stored||[]).forEach(s=> startCreateUserWorker(s.ip, s.username, s.attempts||6, s.intervalMs||3000));
     }catch(e){}
   })();
 
@@ -611,8 +840,13 @@
     container.ondrop = function(e){ e.preventDefault(); saveUserOrderFromDOM(ip); };
   }
 
-  container.addEventListener('click', (e) => {
+  container.addEventListener('click', async (e) => {
     if(isDragging) return;
+    // Close any open dropdown menus when clicking outside
+    const clickedInMenu = e.target.closest && (e.target.closest('.more-menu') || e.target.closest('.card-menu'));
+    if(!clickedInMenu){
+      document.querySelectorAll('.dropdown-menu').forEach(m=> m.classList.remove('show'));
+    }
     if(e.target.classList.contains('btn-reveal')) {
       e.preventDefault();
       e.stopPropagation();
@@ -640,6 +874,9 @@
         showToast('Failed to copy password', 'danger');
       });
     }
+    // Dropdown actions are handled by inline handlers (`toggleAdmin` / `toggleEnable`)
+
+    // legacy btn-more handling removed; dropdowns use inline handlers and toggleAgentMenu
   });
 
   async function loadUsers(ip){
@@ -679,17 +916,36 @@
       container.innerHTML = ordered.map(u => {
         const id = sanitizeName(u.username);
         const revealBtn = u.password_exists ? `<button class="btn-reveal btn-reveal-${id}" type="button" data-action="reveal" data-username-reveal="${u.username}">Reveal</button>` : '';
+
+        // Use API-provided enabled/admin values
+        const isEnabledReal = !!u.enabled;
+        const isAdmin = !!u.admin;
+        const statusClassReal = isEnabledReal ? 'account-status-enabled' : 'account-status-disabled';
+        const statusTextReal = isEnabledReal ? 'Enabled' : 'Disabled';
+        const toggleBtnClassReal = isEnabledReal ? 'btn-toggle btn-toggle-disable' : 'btn-toggle btn-toggle-enable';
+        const toggleBtnTextReal = isEnabledReal ? 'Disable' : 'Enable';
+        const adminBadge = isAdmin ? `<span class="account-status-badge account-status-enabled" data-admin="true">admin</span>` : '';
+
         return `
-        <div class="user-row" style="margin-bottom:10px" data-ip="${currentAgentIp}" data-username="${u.username}">
-          <div style="flex:1">
-            <div class="value">${u.username}</div>
+        <div class="user-row" data-ip="${currentAgentIp}" data-username="${u.username}" data-enabled="${isEnabledReal}">
+          <div class="user-col user-col-name">
+            <div class="value">${u.username}<span class="badges"><span class="account-status-badge ${statusClassReal}">${statusTextReal}</span>${adminBadge}</span></div>
           </div>
-          <div style="flex:1">
+          <div class="user-col user-col-pw" style="position:relative;">
             <span id="pw-${id}" class="password-box"></span>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="user-actions" style="display:flex;gap:8px;align-items:center;position:relative">
             ${revealBtn}
             <button class="btn-set" type="button" data-username-set="${u.username}">Set Password</button>
+            <div class="card-menu" onclick="event.stopPropagation()">
+              <button class="menu-btn" onclick="toggleAgentMenu('${id}', event)">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="dropdown-menu" id="agent-menu-${id}">
+                <button class="${isAdmin? 'dropdown-item danger more-action-admin' : 'dropdown-item green more-action-admin'}" onclick="toggleAdmin(this)" data-username-admin="${u.username}" data-admin-current="${isAdmin}">${isAdmin? 'Downgrade from Admin':'Elevate to Admin'}</button>
+                <button class="${isEnabledReal? 'dropdown-item danger more-action-enable' : 'dropdown-item green more-action-enable'}" onclick="toggleEnable(this)" data-username-enable="${u.username}" data-enabled-current="${isEnabledReal}">${isEnabledReal? 'Disable':'Enable'}</button>
+              </div>
+            </div>
           </div>
         </div>
       `}).join('');
@@ -713,6 +969,106 @@
       container.innerHTML = `<div class="empty">Failed to load users: ${e.message}</div>`;
       console.error(e);
     }
+  }
+
+  function toggleAgentMenu(id, event) {
+    const menu = document.getElementById('agent-menu-' + id);
+    // Close all other menus
+    document.querySelectorAll('.dropdown-menu').forEach((m) => { if (m !== menu) m.classList.remove('show'); });
+    if (!menu) return;
+    menu.classList.toggle('show');
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function closeMenu(e) {
+      if (!e.target.closest('.card-menu')) {
+        menu.classList.remove('show');
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+    if (event && event.stopPropagation) event.stopPropagation();
+  }
+
+  async function toggleAdmin(btn){
+    const username = btn.dataset.usernameAdmin || btn.getAttribute('data-username-admin');
+    const currentAdmin = String(btn.dataset.adminCurrent || btn.getAttribute('data-admin-current')) === 'true';
+    const newAdmin = !currentAdmin;
+    try{
+      try{ setShownStatus(currentAgentIp, username, 0); }catch(e){}
+      setUserStatus(currentAgentIp, username, 'pending');
+      showToast(username + ': admin change submitted', 'pending', 8000);
+      const form = new FormData();
+      form.append('ip_address', currentAgentIp);
+      form.append('username', username);
+      form.append('admin', String(newAdmin));
+      const resp = await fetch('/set_user_admin', { method: 'POST', body: form });
+      if(!resp.ok) throw new Error('Request failed');
+      const userRow = document.querySelector(`[data-username="${username}"]`);
+      if(userRow){
+        const badgesContainer = userRow.querySelector('.badges');
+        if(badgesContainer){
+          const existingAdmin = badgesContainer.querySelector('[data-admin]');
+          if(newAdmin){ if(!existingAdmin){ const span = document.createElement('span'); span.className = 'account-status-badge account-status-enabled'; span.setAttribute('data-admin','true'); span.innerText = 'admin'; badgesContainer.appendChild(span); } }
+          else { if(existingAdmin) existingAdmin.remove(); }
+          const dropdown = userRow.querySelector('.dropdown-menu');
+          if(dropdown){
+            const adminBtn = dropdown.querySelector('.more-action-admin');
+            if(adminBtn){
+              adminBtn.dataset.adminCurrent = String(newAdmin);
+              adminBtn.innerText = newAdmin? 'Downgrade from Admin':'Elevate to Admin';
+              adminBtn.classList.remove('green','danger');
+              adminBtn.classList.add(newAdmin ? 'danger' : 'green');
+            }
+            dropdown.classList.remove('show');
+          }
+          try{ btn.dataset.adminCurrent = String(newAdmin); }catch(e){}
+          showToast(`User ${username} admin set to ${newAdmin}`, 'success', 3000);
+          try{ const pollInterval = parseInt(localStorage.getItem('pending_poll_interval_ms')) || 10000; enqueuePoll(currentAgentIp, username, 6, pollInterval); }catch(e){}
+        }
+      }
+    }catch(err){ console.error(err); showToast('Failed to change admin status', 'danger'); }
+  }
+
+  async function toggleEnable(btn){
+    const username = btn.dataset.usernameEnable || btn.getAttribute('data-username-enable');
+    const currentEnabled = String(btn.dataset.enabledCurrent || btn.getAttribute('data-enabled-current')) === 'true';
+    const newEnabled = !currentEnabled; // Toggle the current enabled state
+    try{
+      try{ setShownStatus(currentAgentIp, username, 0); }catch(e){}
+      setUserStatus(currentAgentIp, username, 'pending');
+      showToast(username + ': enable change submitted', 'pending', 8000);
+      const form = new FormData();
+      form.append('ip_address', currentAgentIp);
+      form.append('username', username);
+      // send explicit boolean strings 'true'/'false' so backend receives clear value
+      form.append('enabled', String(newEnabled)); 
+      const resp = await fetch('/set_user_enabled', { method: 'POST', body: form });
+      if(!resp.ok) throw new Error('Request failed');
+      const userRow = document.querySelector(`[data-username="${username}"]`);
+      if(userRow){
+        userRow.dataset.enabled = String(newEnabled);
+        const badgesContainer = userRow.querySelector('.badges');
+        if(badgesContainer){
+          const statusBadge = badgesContainer.querySelector('.account-status-badge');
+          if(statusBadge){ if(newEnabled){ statusBadge.className = 'account-status-badge account-status-enabled'; statusBadge.innerText = 'Enabled'; } else { statusBadge.className = 'account-status-badge account-status-disabled'; statusBadge.innerText = 'Disabled'; } }
+          const dropdown = userRow.querySelector('.dropdown-menu');
+          if(dropdown){
+            const enableBtn = dropdown.querySelector('.more-action-enable');
+            if(enableBtn){
+              enableBtn.dataset.enabledCurrent = String(newEnabled);
+              enableBtn.innerText = newEnabled? 'Disable':'Enable';
+              enableBtn.classList.remove('green','danger');
+              enableBtn.classList.add(newEnabled ? 'danger' : 'green');
+            }
+            dropdown.classList.remove('show');
+          }
+          const toggleBtn = userRow.querySelector('[data-username-toggle]');
+          if(toggleBtn){ if(newEnabled){ toggleBtn.className = 'btn-toggle btn-toggle-disable'; toggleBtn.innerText = 'Disable'; } else { toggleBtn.className = 'btn-toggle btn-toggle-enable'; toggleBtn.innerText = 'Enable'; } }
+          try{ btn.dataset.enabledCurrent = String(newEnabled); }catch(e){}
+          showToast(`User ${username} ${newEnabled? 'enabled':'disabled'}`, 'success', 3000);
+          try{ const pollInterval = parseInt(localStorage.getItem('pending_poll_interval_ms')) || 10000; enqueuePoll(currentAgentIp, username, 6, pollInterval); }catch(e){}
+        }
+      }
+    }catch(err){ console.error(err); showToast('Failed to change enabled status', 'danger'); }
   }
 
   async function reveal(username){
@@ -832,6 +1188,41 @@
     if(ip) loadUsers(ip);
   })();
 
+  // Add User modal controls
+  function openAddUserModal(){
+    document.getElementById('addUserUsername').value = '';
+    document.getElementById('addUserModal').style.display = 'flex';
+    document.getElementById('addUserUsername').focus();
+  }
+  function closeAddUserModal(){
+    document.getElementById('addUserModal').style.display = 'none';
+    try{ document.getElementById('addUserForm').reset(); }catch(e){}
+  }
+
+  async function submitAddUser(e){
+    e.preventDefault();
+    const username = document.getElementById('addUserUsername').value.trim();
+    if(!username){ showToast('Please enter a username', 'danger'); return; }
+    try{
+      // mark as not-yet-shown and set pending UI
+      try{ setShownStatus(currentAgentIp, username, 0); }catch(e){}
+      setUserStatus(currentAgentIp, username, 'pending');
+      showToast(username + ': create user submitted', 'pending', 8000);
+
+      const form = new FormData();
+      form.append('ip_address', currentAgentIp);
+      form.append('username', username);
+      const resp = await fetch('/add_user', { method: 'POST', body: form });
+      if(!resp.ok){
+        setUserStatus(currentAgentIp, username, null);
+        throw new Error('Request failed');
+      }
+      closeAddUserModal();
+      // start polling to confirm creation
+      try{ enqueueCreateUserPoll(currentAgentIp, username, 8, parseInt(localStorage.getItem('pending_create_poll_interval_ms')) || 3000); }catch(e){}
+    }catch(err){ console.error(err); showToast('Failed to add user', 'danger'); }
+  }
+
   // Add Misc user modal controls
   function openAddMiscModal(){
     document.getElementById('addMiscUsername').value = '';
@@ -852,15 +1243,73 @@
     try{
       // API no longer accepts separate 'service' field — send combined value as username
       const combined = `${service} - ${username}`;
+      // mark as not-yet-shown and set pending UI
+      try{ setShownStatus(currentAgentIp, combined, 0); }catch(e){}
+      setUserStatus(currentAgentIp, combined, 'pending');
+      showToast(combined + ': create user submitted', 'pending', 8000);
+
       const form = new FormData();
       form.append('username', combined);
       const resp = await fetch('/add_misc_user', { method: 'POST', body: form });
-      if(!resp.ok){ throw new Error('Request failed'); }
-      showToast(`User ${combined} added`, 'success', 4000);
+      if(!resp.ok){ setUserStatus(currentAgentIp, combined, null); throw new Error('Request failed'); }
       closeAddMiscModal();
-      // reload users for current agent
-      try{ await loadUsers(currentAgentIp); }catch(e){}
+      // start polling to confirm creation
+      try{ enqueueCreateUserPoll(currentAgentIp, combined, 8, parseInt(localStorage.getItem('pending_create_poll_interval_ms')) || 3000); }catch(e){}
     }catch(err){ console.error(err); showToast('Failed to add user', 'danger'); }
+  }
+
+  async function toggleUserAccount(username){
+    const userRow = document.querySelector(`[data-username="${username}"]`);
+    if(!userRow) return;
+    
+    const currentlyEnabled = userRow.dataset.enabled === 'true';
+    const newStatus = !currentlyEnabled;
+    const action = newStatus ? 'enable' : 'disable';
+    
+    try{
+      // TODO: Replace with actual API call
+      // const form = new FormData();
+      // form.append('ip_address', currentAgentIp);
+      // form.append('username', username);
+      // form.append('enabled', newStatus);
+      // const resp = await fetch('/toggle_user_account', { method: 'POST', body: form });
+      // if(!resp.ok){ throw new Error('Request failed'); }
+      
+      // For now, just simulate success
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+      
+      // Update the UI: preserve admin badge by only updating the account-status-badge
+      userRow.dataset.enabled = newStatus;
+      const badgesContainer = userRow.querySelector('.badges');
+      let statusBadge = null;
+      if (badgesContainer) statusBadge = badgesContainer.querySelector('.account-status-badge');
+      if (!statusBadge) statusBadge = userRow.querySelector('.account-status-badge');
+      const toggleBtn = userRow.querySelector('[data-username-toggle]');
+
+      if (statusBadge) {
+        if(newStatus) {
+          statusBadge.className = 'account-status-badge account-status-enabled';
+          statusBadge.innerText = 'Enabled';
+        } else {
+          statusBadge.className = 'account-status-badge account-status-disabled';
+          statusBadge.innerText = 'Disabled';
+        }
+      }
+      if (toggleBtn) {
+        if(newStatus) {
+          toggleBtn.className = 'btn-toggle btn-toggle-disable';
+          toggleBtn.innerText = 'Disable';
+        } else {
+          toggleBtn.className = 'btn-toggle btn-toggle-enable';
+          toggleBtn.innerText = 'Enable';
+        }
+      }
+      
+      showToast(`User ${username} ${action}d`, 'success', 3000);
+    }catch(err){
+      console.error(err);
+      showToast(`Failed to ${action} user ${username}`, 'danger');
+    }
   }
 
   function showCopyToast(){
