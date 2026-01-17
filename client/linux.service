@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/opt/ccdc-password-manager-client/client
+ExecStart=/opt/ccdc-password-manager-client/ccdc-password-manager-client
 Type=simple
 Restart=always
 RestartSec=10
