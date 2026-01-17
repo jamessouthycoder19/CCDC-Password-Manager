@@ -1,42 +1,43 @@
 package main
 
 import (
+	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	"strings"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
+	"reflect"
 	"runtime"
 	"strconv"
-	"os/exec"
-	"net/http"
-	"crypto/tls"
-	"net/url"
-	"io"
-	"reflect"
+	"strings"
 	"time"
-	"encoding/json"
+
 	"github.com/kardianos/service"
 )
 
 type UserPasswordChangeStatus struct {
-    Status string `json:"status"`
-    Username string `json:"username"`
+	Status   string `json:"status"`
+	Username string `json:"username"`
 }
 
 type User struct {
-    Password string `json:"password"`
-    Username string `json:"username"`
-	Enabled bool `json:"enabled"`
-	Admin bool `json:"admin"`
+	Password string `json:"password"`
+	Username string `json:"username"`
+	Enabled  bool   `json:"enabled"`
+	Admin    bool   `json:"admin"`
 }
 
 type passwordJson struct {
-    Users []User `json:"users"`
+	Users []User `json:"users"`
 }
 
 type localUserJson struct {
-    User string `json:"user"`
-	Enabled bool `json:"enabled"`
-	Admin bool `json:"admin"`
+	User    string `json:"user"`
+	Enabled bool   `json:"enabled"`
+	Admin   bool   `json:"admin"`
 }
 
 func getLocalUsers(is_dc bool) string {
@@ -57,7 +58,7 @@ func getLocalUsers(is_dc bool) string {
 			if len(tokens) > 2 {
 				username := tokens[0]
 				uid, _ := strconv.Atoi(tokens[2])
-				if ((uid >= 1000 || username == "root") && username != "nobody") {
+				if (uid >= 1000 || username == "root") && username != "nobody" {
 					enabled := true
 					if tokens[6] == "/usr/sbin/nologin" || tokens[6] == "/bin/false" {
 						enabled = false
@@ -90,18 +91,18 @@ func getLocalUsers(is_dc bool) string {
 		}
 
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", user_cmd_to_run)
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		users := strings.Split(string(output), "\r\n")
 
 		cmd = exec.Command("powershell.exe", "-NoProfile", "-C", admin_user_cmd_to_run)
-		output, _ = cmd.Output()
+		output, _ = cmd.CombinedOutput()
 		admin_users_list := strings.Split(string(output), "\r\n")
 
 		local_users := []localUserJson{}
 
 		// Get rid of computer accounts on AD, which contain $
 		for _, user := range users {
-			if !strings.Contains(user, "$") && len(strings.TrimSpace(user)) > 0{
+			if !strings.Contains(user, "$") && len(strings.TrimSpace(user)) > 0 {
 				tokens := strings.Fields(user)
 				user := tokens[0]
 				enabled := tokens[1]
@@ -113,7 +114,7 @@ func getLocalUsers(is_dc bool) string {
 				} else {
 					enabled_val = false
 				}
-				
+
 				is_admin := false
 				for _, admin_user := range admin_users_list {
 					admin_user = strings.TrimSpace(admin_user)
@@ -137,27 +138,27 @@ func getLocalUsers(is_dc bool) string {
 
 // difference returns the elements in `a` that aren't in `b`.
 func difference(a, b []string) []string {
-    mb := make(map[string]struct{}, len(b))
-    for _, x := range b {
-        mb[x] = struct{}{}
-    }
-    var diff []string
-    for _, x := range a {
-        if _, found := mb[x]; !found {
-            diff = append(diff, x)
-        }
-    }
-    return diff
+	mb := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for _, x := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
 }
 
 func getLocalIP() string {
 	if runtime.GOOS == "linux" {
 		cmd := exec.Command("hostname", "-I")
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		return strings.Split(string(output), " ")[0]
 	} else {
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like \"*Ethernet*\" }).IPAddress")
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		return strings.TrimSpace(string(output))
 	}
 }
@@ -165,11 +166,11 @@ func getLocalIP() string {
 func getHostname() string {
 	if runtime.GOOS == "linux" {
 		cmd := exec.Command("hostname")
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		return strings.TrimSpace(string(output))
 	} else {
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "hostname")
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		return strings.TrimSpace(string(output))
 	}
 }
@@ -192,7 +193,7 @@ func getSudoGroupName() string {
 func checkUserExists(username string, users string) bool {
 	var userJson []localUserJson
 	json.Unmarshal([]byte(users), &userJson)
-	
+
 	for _, user := range userJson {
 		if user.User == username {
 			return true
@@ -206,7 +207,7 @@ func getIsDC() bool {
 		return false
 	} else {
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Get-WmiObject -Query 'select * from Win32_OperatingSystem where (ProductType = \"2\")'")
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		if len(output) != 0 {
 			return true
 		}
@@ -218,7 +219,7 @@ func getToken() string {
 	local_ip := getLocalIP()
 	server_ip_address := getServerIPAddress()
 	token := ""
-	
+
 	if runtime.GOOS == "windows" {
 		tokenBytes, err := os.ReadFile("C:\\Program Files\\CCDC-Password-Manager\\token.txt")
 		if err != nil {
@@ -242,7 +243,7 @@ func getToken() string {
 	form.Add("ip_address", local_ip)
 	form.Add("hostname", hostname)
 
-	resp, _ := http.PostForm("https://" + server_ip_address + "/register_client",form)
+	resp, _ := http.PostForm("https://"+server_ip_address+"/register_client", form)
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	token = string(body)
@@ -258,7 +259,7 @@ func getToken() string {
 			fmt.Println("Error writing token.txt:", err)
 		}
 	}
-	
+
 	return token
 }
 
@@ -269,7 +270,7 @@ func getServerIPAddress() string {
 			fmt.Println("Error Loading Server IP Address:", err)
 		}
 		server_ip := strings.TrimSpace(string(serverIPBytes))
-		
+
 		return server_ip
 	} else {
 		serverIPBytes, err := os.ReadFile("/etc/ccdc-password-manager/server_ip_address.txt")
@@ -277,7 +278,7 @@ func getServerIPAddress() string {
 			fmt.Println("Error Loading Server IP Address:", err)
 		}
 		server_ip := strings.TrimSpace(string(serverIPBytes))
-		
+
 		return server_ip
 	}
 }
@@ -286,21 +287,21 @@ func changeUserPassword(username string, newPassword string, is_dc bool) error {
 	if newPassword == "None" {
 		return nil
 	}
-	
+
 	if runtime.GOOS == "linux" {
 		cmd := exec.Command("sudo", "chpasswd")
 		input := fmt.Sprintf("%s:%s", username, newPassword)
 		cmd.Stdin = strings.NewReader(input)
-		_, err := cmd.Output()
+		_, err := cmd.CombinedOutput()
 		return err
 	} else {
 		if is_dc {
-			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Set-ADAccountPassword -Identity \"" +  username +"\" -Reset -NewPassword (ConvertTo-SecureString \"" + newPassword + "\" -AsPlainText -Force)")
-			_, err := cmd.Output()
+			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Set-ADAccountPassword -Identity \""+username+"\" -Reset -NewPassword (ConvertTo-SecureString \""+newPassword+"\" -AsPlainText -Force)")
+			_, err := cmd.CombinedOutput()
 			return err
 		} else {
-			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Set-LocalUser -Name \"" + username + "\" -Password (ConvertTo-SecureString \"" + newPassword + "\" -AsPlainText -Force)")
-			_, err := cmd.Output()
+			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Set-LocalUser -Name \""+username+"\" -Password (ConvertTo-SecureString \""+newPassword+"\" -AsPlainText -Force)")
+			_, err := cmd.CombinedOutput()
 			return err
 		}
 	}
@@ -310,11 +311,11 @@ func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_nam
 	if runtime.GOOS != "windows" {
 		if isAdmin {
 			cmd := exec.Command("sudo", "usermod", "-aG", sudo_group_name, username)
-			_, err := cmd.Output()
+			_, err := cmd.CombinedOutput()
 			return err
 		} else {
 			cmd := exec.Command("sudo", "gpasswd", "-d", username, sudo_group_name)
-			_, err := cmd.Output()
+			_, err := cmd.CombinedOutput()
 			return err
 		}
 	} else {
@@ -324,8 +325,8 @@ func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_nam
 		} else {
 			command_to_run = "Get-LocalGroupMember Administrators | select-object name | format-table -hideTableHeaders"
 		}
-		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", command_to_run)		
-		output, _ := cmd.Output()
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", command_to_run)
+		output, _ := cmd.CombinedOutput()
 		admin_users_list := strings.Split(string(output), "\r\n")
 		already_admin := false
 		for _, admin_user := range admin_users_list {
@@ -356,9 +357,9 @@ func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_nam
 				command_to_run = "Remove-LocalGroupMember -Group Administrators -Member \"" + username + "\""
 			}
 		}
-		
+
 		cmd = exec.Command("powershell.exe", "-NoProfile", "-C", command_to_run)
-		_, err := cmd.Output()
+		_, err := cmd.CombinedOutput()
 		return err
 	}
 }
@@ -372,7 +373,7 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 			cmd_to_run = "sudo usermod -s /usr/sbin/nologin " + username
 		}
 		cmd := exec.Command("bash", "-c", cmd_to_run)
-		_, err := cmd.Output()
+		_, err := cmd.CombinedOutput()
 		return err
 	} else {
 		cmd_to_run := ""
@@ -382,7 +383,7 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 			cmd_to_run = "get-localuser | select-object name, enabled | format-table -hideTableHeaders"
 		}
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", cmd_to_run)
-		output, _ := cmd.Output()
+		output, _ := cmd.CombinedOutput()
 		users := strings.Split(string(output), "\r\n")
 		currently_enabled := false
 		for _, user := range users {
@@ -404,12 +405,12 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 		}
 
 		if isEnabled {
-			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Enable-LocalUser -Name \"" + username + "\"")
-			_, err := cmd.Output()
+			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Enable-LocalUser -Name \""+username+"\"")
+			_, err := cmd.CombinedOutput()
 			return err
 		} else {
-			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Disable-LocalUser -Name \"" + username + "\"")
-			_, err := cmd.Output()
+			cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "Disable-LocalUser -Name \""+username+"\"")
+			_, err := cmd.CombinedOutput()
 			return err
 		}
 	}
@@ -418,7 +419,7 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 func createUser(username string, password string, isEnabled bool, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
 		cmd := exec.Command("sudo", "useradd", "-m", username)
-		_, err := cmd.Output()
+		_, err := cmd.CombinedOutput()
 		if err != nil {
 			return err
 		}
@@ -436,8 +437,8 @@ func createUser(username string, password string, isEnabled bool, isAdmin bool, 
 		}
 		return nil
 	} else {
-		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "New-LocalUser -Name \"" + username + "\" -Password (ConvertTo-SecureString \"" + password + "\" -AsPlainText -Force)")
-		_, err := cmd.Output()
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-C", "New-LocalUser -Name \""+username+"\" -Password (ConvertTo-SecureString \""+password+"\" -AsPlainText -Force)")
+		_, err := cmd.CombinedOutput()
 		if err != nil {
 			return err
 		}
@@ -462,7 +463,7 @@ func (p *program) Start(s service.Service) error {
 
 func (p *program) run() {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	
+
 	is_dc := getIsDC()
 	local_ip := getLocalIP()
 
@@ -478,11 +479,11 @@ func (p *program) run() {
 	form.Add("local_users", local_users)
 	form.Add("authoriztion_token", token)
 
-	resp, _ := http.PostForm("https://" + server_ip_address + "/update_local_users",form)
+	resp, _ := http.PostForm("https://"+server_ip_address+"/update_local_users", form)
 
 	for {
 		i += 1
-		if i % 5 == 0 {
+		if i%5 == 0 {
 			new_local_user_list := getLocalUsers(is_dc)
 			if !reflect.DeepEqual(new_local_user_list, local_users) {
 
@@ -493,7 +494,7 @@ func (p *program) run() {
 				form.Add("local_users", new_local_user_list)
 				form.Add("authoriztion_token", token)
 
-				resp, _ = http.PostForm("https://" + server_ip_address + "/update_local_users",form)
+				resp, _ = http.PostForm("https://"+server_ip_address+"/update_local_users", form)
 			}
 		}
 
@@ -501,17 +502,17 @@ func (p *program) run() {
 		form.Add("ip_address", local_ip)
 		form.Add("authoriztion_token", token)
 
-		resp, _ = http.PostForm("https://" + server_ip_address + "/get_passwords_to_claim",form)
+		resp, _ = http.PostForm("https://"+server_ip_address+"/get_passwords_to_claim", form)
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		
+
 		if len(body) != 0 {
 			var userPasswords passwordJson
 			json.Unmarshal(body, &userPasswords)
 
 			var userPasswordChangeStatus []UserPasswordChangeStatus
 
-			for _, userToChangePassword := range userPasswords.Users {	
+			for _, userToChangePassword := range userPasswords.Users {
 
 				if checkUserExists(userToChangePassword.Username, local_users) {
 					setUserPasswordErr := changeUserPassword(userToChangePassword.Username, userToChangePassword.Password, is_dc)
@@ -551,7 +552,7 @@ func (p *program) run() {
 				form.Add("user_status", string(jsonBytes))
 				form.Add("authoriztion_token", token)
 
-				resp, _ = http.PostForm("https://" + server_ip_address + "/update_password_change_status",form)
+				resp, _ = http.PostForm("https://"+server_ip_address+"/update_password_change_status", form)
 			}
 		}
 

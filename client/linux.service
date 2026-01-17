@@ -9,6 +9,7 @@ Type=simple
 Restart=always
 RestartSec=10
 User=root
+PAMName=login
 
 [Install]
 WantedBy=multi-user.target
