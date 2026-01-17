@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"log"
 
 	"github.com/kardianos/service"
 )
@@ -418,8 +419,10 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 
 func createUser(username string, password string, isEnabled bool, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
-		cmd := exec.Command("sudo", "useradd", "-m", username)
-		_, err := cmd.CombinedOutput()
+		cmd := exec.Command("/usr/bin/sudo", "/usr/sbin/useradd", "-m", username)
+		out, err := cmd.CombinedOutput()
+		log.Printf("useradd output: %s, err: %v", out, err)
+		// _, err := cmd.CombinedOutput()
 		if err != nil {
 			return err
 		}
@@ -454,6 +457,13 @@ func createUser(username string, password string, isEnabled bool, isAdmin bool, 
 	}
 }
 
+func must(v string, err error) string {
+    if err != nil {
+        log.Fatalf("fatal error: %v", err)
+    }
+    return v
+}
+
 type program struct{}
 
 func (p *program) Start(s service.Service) error {
@@ -462,6 +472,10 @@ func (p *program) Start(s service.Service) error {
 }
 
 func (p *program) run() {
+	log.Printf("CWD: %s", must(os.Getwd()))
+	log.Printf("PATH: %s", os.Getenv("PATH"))
+	log.Printf("HOME: %s", os.Getenv("HOME"))
+
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	is_dc := getIsDC()
