@@ -243,9 +243,8 @@ def load_starting_clients():
         lines = f.readlines()
         for line in lines:
             ip_address = line.strip()
-            if ip_address != "[clients]":
-                if ip_address not in [client['ip_address'] for client in clients]:
-                    add_new_client(ip_address)
+            if ip_address not in [client['ip_address'] for client in clients]:
+                add_new_client(ip_address)
     db.commit()
 
 def validate_app_user(username, password):
