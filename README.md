@@ -11,11 +11,11 @@ To compile the agents
 
 Windows
 ```
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o windows.exe main.go
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o windows.exe
 ```
 Linux
 ```
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o linux  main.go
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o linux
 ```
 
 To tell git no to track any changes to the password_manager.db file
