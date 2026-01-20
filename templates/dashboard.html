@@ -1121,9 +1121,9 @@
       }
     });
 
-    // Initial load and refresh every 10 seconds
+    // Initial load and refresh every 30 seconds
     fetchAgents();
-    setInterval(fetchAgents, 10000);
+    setInterval(fetchAgents, 30000);
     const searchInput = document.getElementById('agentSearch');
     if (searchInput) {
       const debouncedSearch = debounce((val) => {
