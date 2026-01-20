@@ -756,7 +756,6 @@ def register_client():
 
 if __name__ == '__main__':
     with app.app_context():
-        clear_db()
         init_db()
         load_starting_clients()
 
