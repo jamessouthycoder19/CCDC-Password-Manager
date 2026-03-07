@@ -1,0 +1,15 @@
+name: Password Manager Container Build
+
+on: 
+  push
+
+jobs:
+  build_and_publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build and push Image
+        run: |
+          docker login --username jamessouthycoder19 --password ${{ secrets.DOCKER_ACTION_SECRET }} ghcr.io
+          docker build . -t ghcr.io/ccdc-rit/password-manager:latest
+          docker push ghcr.io/ccdc-rit/password-manager:latest
