@@ -22,3 +22,7 @@ To tell git no to track any changes to the password_manager.db file
 ```
 git update-index --assume-unchanged example.txt
 ```
+And to undo it
+```
+git update-index --no-assume-unchanged example.txt
+```
