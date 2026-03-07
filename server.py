@@ -234,12 +234,15 @@ def add_new_client(ip_address):
 
 def load_starting_clients():
     db = get_db()
-    db.execute(
-        "INSERT INTO client_tokens (ip_address, hostname, token) VALUES (?, ?, ?)",
-        ("MISC", None, secrets.token_hex(16))
-    )
+    
     clients = db.execute("SELECT ip_address FROM client_tokens").fetchall()
     with open("starting_clients.txt", "r") as f:
+        if "MISC" not in [client['ip_address'] for client in clients]:
+            db.execute(
+                "INSERT INTO client_tokens (ip_address, hostname, token) VALUES (?, ?, ?)",
+                ("MISC", None, secrets.token_hex(16))
+            )
+
         lines = f.readlines()
         for line in lines:
             ip_address = line.strip()
