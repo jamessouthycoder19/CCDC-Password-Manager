@@ -17,6 +17,14 @@ import (
 	"log"
 )
 
+// Global variables (package-level)
+var (
+	Chpasswd_path = "/usr/sbin/chpasswd"
+	Usermod_path  = "/usr/sbin/usermod"
+	Gpasswd_path  = "/usr/sbin/gpasswd"
+	Useradd_path  = "/usr/sbin/useradd"
+)
+
 type UserPasswordChangeStatus struct {
 	Status   string `json:"status"`
 	Username string `json:"username"`
@@ -37,6 +45,31 @@ type localUserJson struct {
 	User    string `json:"user"`
 	Enabled bool   `json:"enabled"`
 	Admin   bool   `json:"admin"`
+}
+
+func setLocalBinaries() {
+	if runtime.GOOS == "linux" {
+		path, err := exec.LookPath("usermod")
+		if err == nil {
+			Usermod_path = path
+			println("Found usermod at:", path)
+		}
+		path, err = exec.LookPath("gpasswd")
+		if err == nil {
+			Gpasswd_path = path
+			println("Found gpasswd at:", path)
+		}
+		path, err = exec.LookPath("useradd")
+		if err == nil {
+			Useradd_path = path
+			println("Found useradd at:", path)
+		}
+		path, err = exec.LookPath("chpasswd")
+		if err == nil {
+			Chpasswd_path = path
+			println("Found chpasswd at:", path)
+		}
+	}
 }
 
 func getLocalUsers(is_dc bool) string {
@@ -242,11 +275,19 @@ func getToken() string {
 	form.Add("ip_address", local_ip)
 	form.Add("hostname", hostname)
 
-	resp, _ := http.PostForm("https://"+server_ip_address+"/register_client", form)
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	token = string(body)
-
+	code := 400
+	for code != 200 {
+		resp, _ := http.PostForm("https://"+server_ip_address+"/register_client", form)
+		defer resp.Body.Close()
+		code = resp.StatusCode
+		body, _ := io.ReadAll(resp.Body)
+		token = string(body)
+		if code != 200 {
+			fmt.Println("Error registering client:", token)
+			time.Sleep(30 * time.Second)
+		}
+	}
+	
 	if runtime.GOOS == "windows" {
 		err := os.WriteFile("C:\\Program Files\\CCDC-Password-Manager\\token.txt", []byte(token), 0600)
 		if err != nil {
@@ -288,7 +329,7 @@ func changeUserPassword(username string, newPassword string, is_dc bool) error {
 	}
 
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("/usr/sbin/chpasswd")
+		cmd := exec.Command(Chpasswd_path)
 		input := fmt.Sprintf("%s:%s", username, newPassword)
 		cmd.Stdin = strings.NewReader(input)
 		_, err := cmd.CombinedOutput()
@@ -309,11 +350,11 @@ func changeUserPassword(username string, newPassword string, is_dc bool) error {
 func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
 		if isAdmin {
-			cmd := exec.Command("/usr/sbin/usermod", "-aG", sudo_group_name, username)
+			cmd := exec.Command(Usermod_path, "-aG", sudo_group_name, username)
 			_, err := cmd.CombinedOutput()
 			return err
 		} else {
-			cmd := exec.Command("/usr/sbin/gpasswd", "-d", username, sudo_group_name)
+			cmd := exec.Command(Gpasswd_path, "-d", username, sudo_group_name)
 			_, err := cmd.CombinedOutput()
 			return err
 		}
@@ -365,15 +406,15 @@ func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_nam
 
 func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error {
 	if runtime.GOOS != "windows" {
-		cmd_to_run := ""
-		if isEnabled {
-			cmd_to_run = "/usr/sbin/usermod -s /bin/bash " + username
-		} else {
-			cmd_to_run = "/usr/sbin/usermod -s /usr/sbin/nologin " + username
-		}
-		cmd := exec.Command(cmd_to_run)
-		_, err := cmd.CombinedOutput()
-		return err
+		shell := "/bin/bash"
+        if !isEnabled {
+            shell = "/usr/sbin/nologin"
+        }
+
+        cmd := exec.Command(Usermod_path, "-s", shell, username)
+        
+        _, err := cmd.CombinedOutput()
+        return err
 	} else {
 		cmd_to_run := ""
 		if is_dc {
@@ -417,10 +458,8 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 
 func createUser(username string, password string, isEnabled bool, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
-		cmd := exec.Command("/usr/sbin/useradd", "-m", username)
-		out, err := cmd.CombinedOutput()
-		log.Printf("useradd output: %s, err: %v", out, err)
-		// _, err := cmd.CombinedOutput()
+		cmd := exec.Command(Useradd_path, "-m", username)
+		_, err := cmd.CombinedOutput()
 		if err != nil {
 			return err
 		}
@@ -467,6 +506,7 @@ func mainLoop() {
 
 	is_dc := getIsDC()
 	local_ip := getLocalIP()
+	setLocalBinaries()
 
 	sudo_group_name := getSudoGroupName()
 	server_ip_address := getServerIPAddress()
@@ -545,6 +585,8 @@ func mainLoop() {
 					}
 				}
 			}
+
+			fmt.Println("User Password Change Statuses:", userPasswordChangeStatus)
 
 			if len(userPasswordChangeStatus) != 0 {
 				jsonBytes, _ := json.Marshal(userPasswordChangeStatus)
