@@ -17,6 +17,7 @@ import hashlib
 import threading
 import time
 import json
+import pyotp
 
 ######################### Setup important local Variables #########################
 
@@ -607,6 +608,12 @@ def get_user_password():
     ).fetchone()
     if row and row['password']:
         decrypted_password = decrypt_data(row['password'])
+
+        # if totp in name, convert key to totp value
+        if "totp" in username.lower():
+            totp = pyotp.TOTP(decrypted_password)
+            decrypted_password = totp.now()
+
         return {'password': decrypted_password}, 200
     return "Password not set", 404
 

@@ -5,3 +5,4 @@ argon2-cffi
 cryptography
 requests
 numpy
+pyotp
