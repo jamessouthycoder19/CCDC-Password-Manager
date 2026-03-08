@@ -288,7 +288,7 @@ func changeUserPassword(username string, newPassword string, is_dc bool) error {
 	}
 
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("sudo", "chpasswd")
+		cmd := exec.Command("/usr/sbin/chpasswd")
 		input := fmt.Sprintf("%s:%s", username, newPassword)
 		cmd.Stdin = strings.NewReader(input)
 		_, err := cmd.CombinedOutput()
@@ -309,7 +309,7 @@ func changeUserPassword(username string, newPassword string, is_dc bool) error {
 func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
 		if isAdmin {
-			cmd := exec.Command("sudo", "usermod", "-aG", sudo_group_name, username)
+			cmd := exec.Command("/usr/sbin/usermod", "-aG", sudo_group_name, username)
 			_, err := cmd.CombinedOutput()
 			return err
 		} else {
