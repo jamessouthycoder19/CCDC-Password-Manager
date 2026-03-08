@@ -1,7 +1,7 @@
 name: password-manager
 services:
   password-manager:
-    build: .
+    image: ghcr.io/ccdc-rit/password-manager:latest
     volumes:
       - ./password_manager.db:/password-manager/password_manager.db
       - ./default_credentials.txt:/password-manager/default_credentials.txt
