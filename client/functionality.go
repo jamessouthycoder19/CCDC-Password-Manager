@@ -313,7 +313,7 @@ func changeAdminStatus(username string, isAdmin bool, is_dc bool, sudo_group_nam
 			_, err := cmd.CombinedOutput()
 			return err
 		} else {
-			cmd := exec.Command("sudo", "gpasswd", "-d", username, sudo_group_name)
+			cmd := exec.Command("/usr/sbin/gpasswd", "-d", username, sudo_group_name)
 			_, err := cmd.CombinedOutput()
 			return err
 		}
@@ -367,11 +367,11 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 	if runtime.GOOS != "windows" {
 		cmd_to_run := ""
 		if isEnabled {
-			cmd_to_run = "sudo usermod -s /bin/bash " + username
+			cmd_to_run = "/usr/sbin/usermod -s /bin/bash " + username
 		} else {
-			cmd_to_run = "sudo usermod -s /usr/sbin/nologin " + username
+			cmd_to_run = "/usr/sbin/usermod -s /usr/sbin/nologin " + username
 		}
-		cmd := exec.Command("bash", "-c", cmd_to_run)
+		cmd := exec.Command(cmd_to_run)
 		_, err := cmd.CombinedOutput()
 		return err
 	} else {
@@ -417,7 +417,7 @@ func changeUserEnabledStatus(username string, isEnabled bool, is_dc bool) error 
 
 func createUser(username string, password string, isEnabled bool, isAdmin bool, is_dc bool, sudo_group_name string) error {
 	if runtime.GOOS != "windows" {
-		cmd := exec.Command("/usr/bin/sudo", "/usr/sbin/useradd", "-m", username)
+		cmd := exec.Command("/usr/sbin/useradd", "-m", username)
 		out, err := cmd.CombinedOutput()
 		log.Printf("useradd output: %s, err: %v", out, err)
 		// _, err := cmd.CombinedOutput()
