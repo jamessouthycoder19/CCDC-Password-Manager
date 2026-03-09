@@ -82,7 +82,7 @@ def validate_encryption_key_state():
             with ENCRYPTION_KEY_LOCK:
                 ENCRYPTION_KEY = ""
 
-        time.sleep(10)
+        time.sleep(30)
 
 ####################### Helper functions #########################
 
@@ -95,19 +95,16 @@ def generate_random_password():
     new_password += RANDOM_SPECIAL_CHAR_LIST[secrets.randbelow(NUMBER_RANDOM_SPECIAL_CHARS)]
     return new_password
 
-def encrypt_data(plaintext):
-    cipher = Cipher(algorithms.AES(ENCRYPTION_KEY), modes.ECB(), backend=default_backend())
+def encrypt_data(plaintext, encryption_key):
+    cipher = Cipher(algorithms.AES(encryption_key), modes.ECB(), backend=default_backend())
     padder = padding.PKCS7(256).padder()
     padded_data = padder.update(plaintext.encode('utf-8')) + padder.finalize()
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
     return ciphertext
 
-def decrypt_data(ciphertext, old_enc_key=None):
-    if old_enc_key is not None:
-        cipher = Cipher(algorithms.AES(old_enc_key), modes.ECB(), backend=default_backend())
-    else:
-        cipher = Cipher(algorithms.AES(ENCRYPTION_KEY), modes.ECB(), backend=default_backend())
+def decrypt_data(ciphertext, decryption_key):
+    cipher = Cipher(algorithms.AES(decryption_key), modes.ECB(), backend=default_backend())
     decryptor = cipher.decryptor()
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
     unpadder = padding.PKCS7(256).unpadder()
@@ -120,28 +117,34 @@ def get_encryption_key():
     with ENCRYPTION_KEY_LOCK:
         return ENCRYPTION_KEY
 
+def get_key_encryption_key(username, password, key_encryption_key_salt):
+    iterations = 100000
+    hash_algorithm = 'sha256'
+
+    key_encryption_key = hashlib.pbkdf2_hmac(
+        hash_algorithm,
+        password.encode('utf-8'),
+        key_encryption_key_salt.encode('utf-8'),
+        iterations
+    )
+
+    return key_encryption_key
+
 def set_encryption_key(username, password):
     global ENCRYPTION_KEY
     global ENCRYPTION_KEY_LOCK
 
-    db = get_db()
+    db = get_db()    
     row = db.execute(
-        "SELECT encryption_key_salt FROM app_credentials WHERE username = ?",
+        "SELECT encrypted_encryption_key, key_encryption_key_salt FROM app_credentials WHERE username = ?",
         (username,)
     ).fetchone()
-    salt = row[0]
-    iterations = 100000
-    hash_algorithm = 'sha256'
-
-    key = hashlib.pbkdf2_hmac(
-        hash_algorithm,
-        password.encode('utf-8'),
-        salt.encode('utf-8'),
-        iterations
-    )
+    
+    key_encryption_key = get_key_encryption_key(username, password, row['key_encryption_key_salt'])
+    key = decrypt_data(row['encrypted_encryption_key'], key_encryption_key)
 
     with ENCRYPTION_KEY_LOCK:
-        ENCRYPTION_KEY = key
+        ENCRYPTION_KEY = bytes.fromhex(key)
 
 def get_db():
     if "db" not in g:
@@ -164,9 +167,11 @@ def init_db():
     db = get_db()
     db.executescript("""
     CREATE TABLE IF NOT EXISTS app_credentials (
-        username             TEXT PRIMARY KEY,
-        password             TEXT NOT NULL,
-        encryption_key_salt  TEXT NOT NULL
+        username                  TEXT PRIMARY KEY,
+        password_hash             TEXT NOT NULL,
+        encryption_key_salt       TEXT NOT NULL,
+        encrypted_encryption_key  TEXT NOT NULL,
+        key_encryption_key_salt   TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS passwords (
@@ -197,9 +202,11 @@ def init_db():
             f.write(f"admin:{starting_admin_password}\n")
 
         encryption_key_salt = os.urandom(16).hex()
+        key_encryption_key_salt = os.urandom(16).hex()
+        encryption_key = os.urandom(32).hex()
         print("Starting Username: admin")
         print(f"Starting Password: {starting_admin_password}")
-        add_app_user("admin", starting_admin_password, encryption_key_salt)
+        add_app_user("admin", starting_admin_password, encryption_key_salt, key_encryption_key_salt, encryption_key)
 
     db.commit()
 
@@ -210,12 +217,14 @@ def clear_db():
     db.execute("DROP TABLE IF EXISTS client_tokens")
     db.commit()
 
-def add_app_user(username, password, encryption_key_salt):
+def add_app_user(username, password, encryption_key_salt, key_encryption_key_salt, encryption_key):
     password_hash = password_hasher.hash(password)
+    key_encryption_key = get_key_encryption_key(username, password, key_encryption_key_salt)
+
     db = get_db()
     db.execute(
-        "INSERT OR REPLACE INTO app_credentials (username, password, encryption_key_salt) VALUES (?, ?, ?)",
-        (username, password_hash, encryption_key_salt)
+        "INSERT OR REPLACE INTO app_credentials (username, password_hash, encryption_key_salt, key_encryption_key_salt, encrypted_encryption_key) VALUES (?, ?, ?, ?, ?)",
+        (username, password_hash, encryption_key_salt, key_encryption_key_salt, encrypt_data(encryption_key, key_encryption_key))
     )
     db.commit()
 
@@ -254,7 +263,7 @@ def load_starting_clients():
 def validate_app_user(username, password):
     db = get_db()
     row = db.execute(
-        "SELECT password FROM app_credentials WHERE username = ?",
+        "SELECT password_hash FROM app_credentials WHERE username = ?",
         (username,)
     ).fetchone()
     if row:
@@ -403,7 +412,7 @@ def add_user():
         return "Missing ip_address or username", 400
     
     password_value = generate_random_password()
-    encrypted_password = encrypt_data(password_value)
+    encrypted_password = encrypt_data(password_value, ENCRYPTION_KEY)
 
     add_stored_password(ip_address, username, encrypted_password)
     return "OK", 200
@@ -520,7 +529,7 @@ def set_user_password():
     if password_value == "RANDOM":
         password_value = generate_random_password()
 
-    add_stored_password(ip_address, username, encrypt_data(password_value))
+    add_stored_password(ip_address, username, encrypt_data(password_value, ENCRYPTION_KEY))
     return "OK", 200
 
 @login_required
@@ -568,30 +577,17 @@ def set_user_admin():
 def set_master_password():
     new_password = request.form.get("new_password")
     
-    current_encryption_key = get_encryption_key()
-    set_encryption_key("admin", new_password)
-
     db = get_db()
-
     row = db.execute(
-        "SELECT encryption_key_salt FROM app_credentials WHERE username = ?",
+        "SELECT encryption_key_salt, key_encryption_key_salt, encrypted_encryption_key from app_credentials WHERE username = ?",
         ("admin",)
     ).fetchone()
-    salt = row[0]
+    encryption_key_salt = row['encryption_key_salt']
+    key_encryption_key_salt = row['key_encryption_key_salt']
+    encrypted_encryption_key = row['encrypted_encryption_key']
 
-    add_app_user("admin", new_password, salt)
-    
-    rows = db.execute(
-        "SELECT * FROM passwords"
-    ).fetchall()
-    for row in rows:
-        if row[2] is not None:
-            ip_address = row[0]
-            username = row[1]
-            password = decrypt_data(row[2], current_encryption_key)
-            encrypted_password = encrypt_data(password)
-            add_stored_password(ip_address, username, encrypted_password)
-    
+    add_app_user("admin", new_password, encryption_key_salt, key_encryption_key_salt, ENCRYPTION_KEY.hex())
+
     return "OK", 200
     
 @login_required
@@ -607,7 +603,7 @@ def get_user_password():
         (ip_address, username)
     ).fetchone()
     if row and row['password']:
-        decrypted_password = decrypt_data(row['password'])
+        decrypted_password = decrypt_data(row['password'], ENCRYPTION_KEY)
 
         # if totp in name, convert key to totp value
         if "totp" in username.lower():
@@ -643,7 +639,7 @@ def get_passwords_to_claim():
     for row in rows:
         new_password = ""
         if row['password'] is not None:
-            new_password = decrypt_data(row['password'])
+            new_password = decrypt_data(row['password'], ENCRYPTION_KEY)
         else:
             new_password = "None"
         
