@@ -11,5 +11,5 @@ jobs:
       - name: Build and push Image
         run: |
           docker login --username jamessouthycoder19 --password ${{ secrets.DOCKER_ACTION_SECRET }} ghcr.io
-          docker build . -t ghcr.io/ccdc-rit/password-manager:latest
-          docker push ghcr.io/ccdc-rit/password-manager:latest
+          docker build . -t ghcr.io/jamessouthycoder19/password-manager:latest
+          docker push ghcr.io/jamessouthycoder19/password-manager:latest
